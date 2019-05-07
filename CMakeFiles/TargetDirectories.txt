@@ -1,0 +1,3 @@
+/repo/simonsirak/BDPT/CMakeFiles/rebuild_cache.dir
+/repo/simonsirak/BDPT/CMakeFiles/edit_cache.dir
+/repo/simonsirak/BDPT/CMakeFiles/SecondLab.dir
