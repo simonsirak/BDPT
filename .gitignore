@@ -1,6 +1,9 @@
 # Prerequisites
 *.d
 
+# Skip bmp image
+*.bmp
+
 # Compiled Object files
 *.slo
 *.lo
