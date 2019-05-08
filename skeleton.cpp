@@ -32,8 +32,8 @@ struct Intersection{
 // GLOBAL VARIABLES
 
 /* Screen variables */
-const int SCREEN_WIDTH = 400;
-const int SCREEN_HEIGHT = 400;
+const int SCREEN_WIDTH = 50;
+const int SCREEN_HEIGHT = 50;
 SDL_Surface* screen;
 
 /* Time */
@@ -45,8 +45,8 @@ float yaw = 0;
 float pitch = 0;
 
 /* Setters for the pitch and yaw given mouse coordinates relative to the center of screen */
-#define PITCH(x, dt) (pitch += (SCREEN_WIDTH / 2.0f - x) * PI * 0.001f * dt / (SCREEN_WIDTH))
-#define YAW(y, dt) (yaw += (y - SCREEN_HEIGHT / 2.0f) * PI * 0.001f * dt / (SCREEN_HEIGHT))
+#define PITCH(x, dt) (pitch += (SCREEN_WIDTH / 2.0f - x) * float(PI) * 0.001f * dt / (SCREEN_WIDTH))
+#define YAW(y, dt) (yaw += (y - SCREEN_HEIGHT / 2.0f) * float(PI) * 0.001f * dt / (SCREEN_HEIGHT))
 
 vec3 cameraPos( 0, 0, -3 );
 
@@ -82,19 +82,27 @@ bool ClosestIntersection(
 	Intersection& closestIntersection 
 );
 
+void FindPath(vec3 start, vec3 direction, int maxDepth, std::vector<vec3>& points);
+void FindPathHelper(vec3 point, vec3 normalToPoint, vec3 directionToPoint, int currentDepth, int maxDepth, std::vector<vec3>& points);
+
+vec3 calcRadianceToPoint(const std::vector<vec3>& points, unsigned int i);
+
 vec3 TracePath(vec3 start, vec3 dir, int depth);
 
 int main( int argc, char* argv[] )
 {
-    srand(time(NULL));
+    srand((unsigned int)time(NULL));
 	// load model
 	LoadTestModel(triangles);
 
 	screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT );
 	t = SDL_GetTicks();	// Set start value for timer.
 
-	Update();
-	Draw();
+	//Update();
+	//Draw();
+
+	//otherwise visual studio closes window
+	while(1){}
 
 	// Compute frame time:
 	int t2 = SDL_GetTicks();
@@ -220,11 +228,11 @@ bool ClosestIntersection(
 	dir = glm::normalize(dir); // does not matter what you do here, the t aka x.x will adjust the length. No need to normalize
     Ray r(start, dir);
 	
-    for(int i = 0; i < triangles.size(); ++i){
+    for(unsigned int i = 0; i < triangles.size(); ++i){
 		const Obj* triangle = triangles[i];
 		double t = triangle->intersect(r);
         if(t > 0.001f && t < closestIntersection.t){ // 0.001 is small epsilon to prevent self intersection
-            closestIntersection.t = t;
+            closestIntersection.t = float(t);
             closestIntersection.triangleIndex = i;
         }
 	}
@@ -257,7 +265,7 @@ vec3 TracePath(vec3 start, vec3 dir, int depth) {
 	// RNG vector in hemisphere
 	std::uniform_real_distribution<float> dis(0, 1.0);
 
-	float theta0 = 2*PI*dis(rd);
+	float theta0 = 2*float(PI)*dis(rd);
 	float theta1 = acos(1 - 2*dis(rd));
 
 	vec3 newdir = vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)); // http://corysimon.github.io/articles/uniformdistn-on-sphere/ THIS WAS A BIG ISSUE, WE FOLLOWED THE STACK OVERFLOW PIECES OF SHIEET. This fixed the "cross light on the ceiling"
@@ -278,7 +286,7 @@ vec3 TracePath(vec3 start, vec3 dir, int depth) {
 
 	// Probability distribution function for lambertian reflection BRDF
 	// const vec3 p = glm::abs(glm::dot(normal, -dir)) * BRDF; // dot between normal and origin ray (ONLY FOR EYE PATH) (THIS DOES NOT WORK WITH LAMBERTIAN REFLECTION SINCE THE BRDF EVALUATIONS WILL CANCEL EACH OTHER OUT AND YIELD A GRAY SCALE IMAGE)
-	const float p = 1 /(2.f*PI); // dot between normal and origin ray (ONLY FOR EYE PATH) (THIS ONE IS USED ONLY FOR LAMBERTIAN REFLECTION SINCE OTHERWISE THE BRDF CANCEL EACH OTHER OUT)
+	const float p = 1 /(2.f*float(PI)); // dot between normal and origin ray (ONLY FOR EYE PATH) (THIS ONE IS USED ONLY FOR LAMBERTIAN REFLECTION SINCE OTHERWISE THE BRDF CANCEL EACH OTHER OUT)
 
 	// Recursively trace reflected light sources.
 
@@ -302,4 +310,42 @@ vec3 TracePath(vec3 start, vec3 dir, int depth) {
 
 	return emittance + res;
 
+}
+
+void FindPath(vec3 start, vec3 direction, int maxDepth, std::vector<vec3>& points){
+	//add current point
+	points.push_back(start);
+	//get first intersection, assume that first intersection is always possible
+	Intersection i;
+	ClosestIntersection(start, direction, triangles, i);
+	//add next point
+	points.push_back(i.position);
+	//helper function to calculate rest of the points
+	FindPathHelper(i.position, i.normal, direction, 1, maxDepth, points);
+}
+
+void FindPathHelper(vec3 point, vec3 normalToPoint, vec3 directionToPoint, int currentDepth, int maxDepth, std::vector<vec3>& points){
+	if(currentDepth <= maxDepth){
+		Intersection i;
+		std::uniform_real_distribution<float> dis(0, 1.0);
+		float theta0 = 2*float(PI)*dis(rd);
+		float theta1 = acos(1 - 2*dis(rd));
+		vec3 newDirection = glm::normalize(vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)));
+		vec3 normalDirection = glm::normalize(-directionToPoint);
+		vec3 normal = glm::dot(normalDirection, normalToPoint) * normalToPoint / glm::dot(normalToPoint, normalToPoint);
+		normal = glm::normalize(normal);
+		newDirection = glm::dot(newDirection, normal) * newDirection / glm::dot(newDirection, newDirection);
+		newDirection = glm::normalize(newDirection);
+		if(ClosestIntersection(point, newDirection, triangles, i)){
+			points.push_back(i.position);
+			FindPathHelper(i.position, i.normal, newDirection, currentDepth+1, maxDepth, points);
+		}else{
+			std::cout << "test";
+			FindPathHelper(point, normalToPoint, directionToPoint, currentDepth, maxDepth, points);
+		}
+	}
+}
+
+vec3 calcRadianceToPoint(const std::vector<vec3>& points) {
+	
 }
