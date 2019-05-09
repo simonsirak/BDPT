@@ -223,6 +223,8 @@ void Draw()
 				vector<Intersection> lightIntersections;
 				FindPath(path.endP.position, lightDir, 4, lightIntersections);
 
+				cout << lightIntersections.size() << endl;
+
 				if(cameraIntersections.size() == 0 || lightIntersections.size() == 0){ // nothing was hit
 					continue;
 				}
