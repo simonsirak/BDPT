@@ -220,11 +220,11 @@ void Draw()
 				FindPath(path.startP, dir, 4, cameraIntersections);
 				vector<Intersection> lightIntersections;
 				FindPath(path.endP, lightDir, 4, lightIntersections);
-				for(unsigned int i = 0 ; i < cameraIntersections.size() ; ++i){
+				for(int i = 0 ; i < cameraIntersections.size() ; ++i){
 					path.intersections.push_back(cameraIntersections[i]);
 					cout << i << endl;
 				}
-				for(unsigned int i = lightIntersections.size() - 1 ; i >= 0 ; --i){
+				for(int i = lightIntersections.size() - 1 ; i >= 0 ; --i){
 					path.intersections.push_back(lightIntersections[i]);
 				}
 				color += calcRadianceToPoint(path, 0);
