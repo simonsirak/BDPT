@@ -217,13 +217,15 @@ void Draw()
 				
 				BDPTpath path;
 				path.startP = {cameraPos, vec3(0,0,0), -1, -1}; // normal not needed
-				path.endP = {lightPos, vec3(0, 0, 0), -1, triangles.size()-1}; // normal not needed
+				Sphere* lightSource = dynamic_cast<Sphere*>(triangles[triangles.size()-1]);
+				path.endP = {lightSource->c + (float(lightSource->r) + 0.001f)*lightDir, -lightDir, -1, triangles.size()-1}; // normal not needed
 				vector<Intersection> cameraIntersections;
 				FindPath(path.startP.position, dir, 4, cameraIntersections);
 				vector<Intersection> lightIntersections;
 				FindPath(path.endP.position, lightDir, 4, lightIntersections);
 
-				cout << lightIntersections.size() << endl;
+				cout << cameraIntersections.size() << endl;
+				//cout << lightIntersections.size() << endl;
 
 				if(cameraIntersections.size() == 0 || lightIntersections.size() == 0){ // nothing was hit
 					continue;
@@ -444,7 +446,7 @@ vec3 calcRadianceToPoint(const BDPTpath& path, unsigned int i) {
 		const float p = 1 /(2.f*PI); // dot between normal and origin ray (ONLY FOR EYE PATH) (THIS ONE IS USED ONLY FOR LAMBERTIAN REFLECTION SINCE OTHERWISE THE BRDF CANCEL EACH OTHER OUT)
 		vec3 incoming = calcRadianceToPoint(path, i+1);
 		vec3 emittance = vec3(triangles[p2.triangleIndex]->emission, triangles[p2.triangleIndex]->emission, triangles[p2.triangleIndex]->emission);
-		vec3 res = emittance + (BRDF / p * incoming * cos_theta);
+		vec3 res = (BRDF / p * incoming * cos_theta);
 
 
 		return res;

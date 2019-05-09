@@ -3,7 +3,7 @@
 cmake_minimum_required (VERSION 2.6)
 project ( SecondLab )
 
-SET(GCC_COVERAGE_COMPILE_FLAGS "-std=c++11 -O3")
+SET(GCC_COVERAGE_COMPILE_FLAGS "-std=c++11 -g -O3")
 add_definitions(${GCC_COVERAGE_COMPILE_FLAGS})
 
 add_executable( SecondLab skeleton.cpp)
