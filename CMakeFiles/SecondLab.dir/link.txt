@@ -1,1 +1,1 @@
-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++   -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.13.sdk -Wl,-search_paths_first -Wl,-headerpad_max_install_names  CMakeFiles/SecondLab.dir/skeleton.cpp.o  -o SecondLab /usr/local/lib/libSDLmain.a /usr/local/lib/libSDL.dylib -framework Cocoa 
+/usr/bin/c++      CMakeFiles/SecondLab.dir/skeleton.cpp.o  -o SecondLab -rdynamic -Wl,-Bstatic -lSDLmain -Wl,-Bdynamic -lSDL -lpthread 
