@@ -28,6 +28,12 @@ struct Intersection{
 	int triangleIndex;
 };
 
+struct BDPTpath{
+	vec3 startP;
+	vec3 endP;
+	vector<Intersection> intersections;
+};
+
 // ----------------------------------------------------------------------------
 // GLOBAL VARIABLES
 
@@ -82,10 +88,10 @@ bool ClosestIntersection(
 	Intersection& closestIntersection 
 );
 
-void FindPath(vec3 start, vec3 direction, int maxDepth, std::vector<vec3>& points);
-void FindPathHelper(vec3 point, vec3 normalToPoint, vec3 directionToPoint, int currentDepth, int maxDepth, std::vector<vec3>& points);
+void FindPath(vec3 start, vec3 direction, int maxDepth, vector<Intersection>& intersections);
+void FindPathHelper(vec3 point, vec3 normalToPoint, vec3 directionToPoint, int currentDepth, int maxDepth, vector<Intersection>& intersections);
 
-vec3 calcRadianceToPoint(const std::vector<vec3>& points, unsigned int i);
+vec3 calcRadianceToPoint(const BDPTpath& path, unsigned int i);
 
 vec3 TracePath(vec3 start, vec3 dir, int depth);
 
@@ -98,8 +104,8 @@ int main( int argc, char* argv[] )
 	screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT );
 	t = SDL_GetTicks();	// Set start value for timer.
 
-	//Update();
-	//Draw();
+	Update();
+	Draw();
 
 	//otherwise visual studio closes window
 	while(1){}
@@ -208,6 +214,26 @@ void Draw()
 
 			color /= numSamples;  // Average samples.
 
+			/*vec3 lightDir = glm::normalize(R*vec3(0.5, 0.5, 0.5));
+			for(int i = 0 ; i < numSamples ; ++i){
+				BDPTpath path;
+				path.startP = cameraPos;
+				path.endP = lightPos;
+				vector<Intersection> cameraIntersections;
+				FindPath(path.startP, dir, 4, cameraIntersections);
+				vector<Intersection> lightIntersections;
+				FindPath(path.endP, lightDir, 4, lightIntersections);
+				for(unsigned int i = 0 ; i < cameraIntersections.size() ; ++i){
+					path.intersections.push_back(cameraIntersections[i]);
+					cout << i << endl;
+				}
+				for(unsigned int i = lightIntersections.size() - 1 ; i >= 0 ; --i){
+					path.intersections.push_back(lightIntersections[i]);
+				}
+				color += calcRadianceToPoint(path, 0);
+			}
+			color /= numSamples;*/
+
 			PutPixelSDL( screen, x, y,  color);
 		}
 	}
@@ -247,7 +273,7 @@ bool ClosestIntersection(
 
 vec3 TracePath(vec3 start, vec3 dir, int depth) {
 
-	if (depth >= 4) {
+	if (depth >= 4000) {
 		return vec3(0, 0, 0) ;  // Bounced enough times
 	}
 
@@ -312,19 +338,18 @@ vec3 TracePath(vec3 start, vec3 dir, int depth) {
 
 }
 
-void FindPath(vec3 start, vec3 direction, int maxDepth, std::vector<vec3>& points){
-	//add current point
-	points.push_back(start);
+//assume startP and endP already assigned
+void FindPath(vec3 start, vec3 direction, int maxDepth, vector<Intersection>& intersections){
 	//get first intersection, assume that first intersection is always possible
 	Intersection i;
 	ClosestIntersection(start, direction, triangles, i);
 	//add next point
-	points.push_back(i.position);
+	intersections.push_back(i);
 	//helper function to calculate rest of the points
-	FindPathHelper(i.position, i.normal, direction, 1, maxDepth, points);
+	FindPathHelper(i.position, i.normal, direction, 1, maxDepth, intersections);
 }
 
-void FindPathHelper(vec3 point, vec3 normalToPoint, vec3 directionToPoint, int currentDepth, int maxDepth, std::vector<vec3>& points){
+void FindPathHelper(vec3 point, vec3 normalToPoint, vec3 directionToPoint, int currentDepth, int maxDepth, vector<Intersection>& intersections){
 	if(currentDepth <= maxDepth){
 		Intersection i;
 		std::uniform_real_distribution<float> dis(0, 1.0);
@@ -337,15 +362,42 @@ void FindPathHelper(vec3 point, vec3 normalToPoint, vec3 directionToPoint, int c
 		newDirection = glm::dot(newDirection, normal) * newDirection / glm::dot(newDirection, newDirection);
 		newDirection = glm::normalize(newDirection);
 		if(ClosestIntersection(point, newDirection, triangles, i)){
-			points.push_back(i.position);
-			FindPathHelper(i.position, i.normal, newDirection, currentDepth+1, maxDepth, points);
+			intersections.push_back(i);
+			FindPathHelper(i.position, i.normal, newDirection, currentDepth+1, maxDepth, intersections);
 		}else{
-			std::cout << "test";
-			FindPathHelper(point, normalToPoint, directionToPoint, currentDepth, maxDepth, points);
+			//FindPathHelper(point, normalToPoint, directionToPoint, currentDepth, maxDepth, intersections);
 		}
 	}
 }
 
-vec3 calcRadianceToPoint(const std::vector<vec3>& points) {
-	
+vec3 calcRadianceToPoint(const BDPTpath& path, unsigned int i) {
+	if(i >= path.intersections.size()){
+		return vec3(0, 0, 0);
+	}else{
+		vec3 p0;
+		if(i == 0){
+			p0 = path.startP;
+		}else{
+			p0 = path.intersections[i-1].position;
+		}
+		vec3 p1 = path.intersections[i].position;
+		vec3 p2;
+		if(i == path.intersections.size() - 1){
+			p2 = path.endP;
+		}else{
+			p2 = path.intersections[i+1].position;
+		}
+		vec3 n1 = path.intersections[i].normal;
+		vec3 oldDirection = glm::normalize(p0 - p1);
+		vec3 newDirection = glm::normalize(p2 - p1);
+		vec3 normal = glm::normalize(glm::dot(oldDirection, n1) * n1 / glm::dot(n1, n1));
+		float cos_theta = glm::dot(newDirection, normal);
+		vec3 BRDF = triangles[path.intersections[i].triangleIndex]->color / float(PI);
+		const float p = 1 /(2.f*float(PI));
+		vec3 incoming = calcRadianceToPoint(path, i+1);
+		vec3 emittance = vec3(triangles[path.intersections[i].triangleIndex]->emission, triangles[path.intersections[i].triangleIndex]->emission, triangles[path.intersections[i].triangleIndex]->emission);
+		vec3 res = (BRDF / p * incoming * cos_theta);
+		return emittance + res;
+	}
+
 }
