@@ -72,7 +72,7 @@ mat3 P; // Pitch rotation matrix (around x axis)
 /* Model */
 vector<Obj*> triangles;
 
-int numSamples = 50;
+int numSamples = 5;
 
 /* Light source */
 vec3 lightPos( 0, -0.5, -0.7 );
