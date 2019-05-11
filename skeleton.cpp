@@ -30,7 +30,10 @@ struct Intersection{
 
 struct Vertex {
 	float p; // probability of reaching this particular vertex
-	float c; // contribution from a path that crosses to the other sub-path from this vertex
+	vec3 c; // contribution from a path that crosses to the other sub-path from this vertex
+	int surfaceIndex; // index of surface collided with
+	vec3 normal; // correctly oriented normal of surface collided with
+	vec3 position;
 };
 
 // ----------------------------------------------------------------------------
@@ -69,7 +72,7 @@ mat3 P; // Pitch rotation matrix (around x axis)
 /* Model */
 vector<Obj*> triangles;
 
-int numSamples = 500;
+int numSamples = 50;
 
 /* Light source */
 vec3 lightPos( 0, -0.5, -0.7 );
@@ -87,6 +90,9 @@ bool ClosestIntersection(
 	const vector<Obj*>& triangles, 
 	Intersection& closestIntersection 
 );
+
+float G(vec3 na, vec3 nb, vec3 ab);
+vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath);
 
 //vec3 TracePath(vec3 start, vec3 dir, int depth);
 void TracePath(Ray r, vector<Vertex>& subPath, int i, int t);
@@ -199,34 +205,23 @@ void Draw()
                             focalLength
                         ); 
 
+				vec3 normal(
+							0, 
+                            0, 
+                            focalLength
+						);
+
                 // dir = dir;
-                // dir = R * dir; // direction is rotated by camera rotation matrix
+                dir = R * dir; // direction is rotated by camera rotation matrix
+				normal = R * normal;
                 // dir = glm::normalize(dir); // normalize direction, crucial!!
 
 				vector<Vertex> lightPath;
 				vector<Vertex> eyePath;
-				lightPath.push_back({1, 1}); // i = 0
-				eyePath.push_back({1, 1}); // i = 0
+				lightPath.push_back({1, vec3(1,1,1), -1, vec3(), vec3()}); // i = 0, so collided surface is nothing
+				eyePath.push_back({1, vec3(1,1,1), -1, vec3(), vec3()}); // i = 0, so collided surface is nothing
 				
 				// i = 1
-
-				// P1, C1 for Light
-				Sphere * light = dynamic_cast<Sphere*>(triangles[triangles.size()-1]);
-				float p1 = float(1/(light->r*light->r*4*PI*2*PI)); // probability is 1/(AreaOfLight*2PI)
-				lightPath.push_back({p1, light->emission/p1});
-
-				// P1, C1 for Eye
-				p1 = 1; // for now, we assume area of a pixel is perfectly covered by one ray.
-				// We calculation: http://rendering-memo.blogspot.com/2016/03/bidirectional-path-tracing-3-importance.html
-				float cosTheta = glm::normalize(dir).z; // think about the triangle, we want the angle.
-				float G = cosTheta*cosTheta / (dir.length() * dir.length());
-				float We = float(1 / (1 * G)); // 1 / (AreaOfFilmAkaPixel * G), vi använder inte lens, vi kör 0-size aperture
-				eyePath.push_back({p1, We/p1});
-
-				// Trace eye path
-				TracePath(Ray(cameraPos, dir), eyePath, 2, 4);
-
-				// Trace light path
 
 				std::uniform_real_distribution<float> dis(0, 1.0);
 
@@ -235,8 +230,28 @@ void Draw()
 
 				vec3 newdir = glm::normalize(vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)));
 
+				// P1, C1 for Light
+				Sphere * light = dynamic_cast<Sphere*>(triangles[triangles.size()-1]);
+				float p1 = float(1/(light->r*light->r*4*PI*2*PI)); // probability is 1/(AreaOfLight*2PI)
+				lightPath.push_back({p1, vec3(light->emission/p1,light->emission/p1,light->emission/p1), int(triangles.size()-1), newdir, light->c + float(light->r)*newdir}); // light is on last index
+
+				// P1, C1 for Eye
+				p1 = 1; // for now, we assume area of a pixel is perfectly covered by one ray.
+				// We calculation: http://rendering-memo.blogspot.com/2016/03/bidirectional-path-tracing-3-importance.html
+				float cosTheta = glm::normalize(dir).z; // think about the focalLength triangle, we want the angle.
+				float G = cosTheta*cosTheta / (dir.length() * dir.length());
+				float We = float(1 / (1 * G)); // 1 / (AreaOfFilmAkaPixel * G), vi använder inte lens, vi kör 0-size aperture
+				eyePath.push_back({p1, vec3(We/p1,We/p1,We/p1), -1, glm::normalize(normal), vec3()}); // surface of a pixel is not really a collided surface
+
+				// Trace eye path
+				TracePath(Ray(cameraPos, dir), eyePath, 2, 4);
+
+				// Trace light path
+
 				// for now, direction of ray = direction from center to point. Should change to random hemisphere direction later.
-				TracePath(Ray(light->c + light->r*newdir, newdir), lightPath, 2, 4);
+				TracePath(Ray(light->c + float(light->r)*newdir, newdir), lightPath, 2, 2);
+
+				buffer[x][y] += connect(lightPath, eyePath) / float(numSamples);
 
                 // buffer[x][y] += (TracePath(Ray(cameraPos, dir), 0) / float(numSamples));
 
@@ -393,12 +408,12 @@ vec3 TracePath(vec3 start, vec3 dir, int depth) {
 
 void TracePath(Ray r, vector<Vertex>& subPath, int i, int t) {
 
-	if (depth >= t) {
+	if (i >= t) {
 		return;  // Bounced enough times
 	}
 
-	Intersection i;
-	if (!ClosestIntersection(r.o, r.d, triangles, i)) {
+	Intersection point;
+	if (!ClosestIntersection(r.o, r.d, triangles, point)) {
 		return;  // Nothing was hit.
 	}
 
@@ -413,7 +428,7 @@ void TracePath(Ray r, vector<Vertex>& subPath, int i, int t) {
 
 	// Pick a random direction from here and keep going.
 
-	vec3 newstart = i.position;
+	vec3 newstart = point.position;
 
 	// RNG vector in hemisphere
 	std::uniform_real_distribution<float> dis(0, 1.0);
@@ -422,45 +437,109 @@ void TracePath(Ray r, vector<Vertex>& subPath, int i, int t) {
 	float theta1 = acos(1 - 2*dis(rd));
 
 	vec3 newdir = vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)); // http://corysimon.github.io/articles/uniformdistn-on-sphere/ THIS WAS A BIG ISSUE, WE FOLLOWED THE STACK OVERFLOW PIECES OF SHIEET. This fixed the "cross light on the ceiling"
-	vec3 surfaceToLight = glm::normalize(start - newstart);
+	vec3 surfaceToLight = glm::normalize(r.o - newstart);
 
 	newdir = glm::normalize(newdir);
 	// enforce direction to be in correct hemisphere, aka project normal onto random vector and normalize
-	vec3 normal = glm::dot(surfaceToLight, triangles[i.triangleIndex]->normal(newstart)) * triangles[i.triangleIndex]->normal(newstart) / glm::dot(triangles[i.triangleIndex]->normal(newstart), triangles[i.triangleIndex]->normal(newstart));
+	vec3 normal = glm::dot(surfaceToLight, triangles[point.triangleIndex]->normal(newstart)) * triangles[point.triangleIndex]->normal(newstart) / glm::dot(triangles[point.triangleIndex]->normal(newstart), triangles[point.triangleIndex]->normal(newstart));
 	normal = glm::normalize(normal); // HAS to be normalized after projection onto another vector.
 	newdir = glm::dot(newdir, normal) * newdir / glm::dot(newdir, newdir);
 	newdir = glm::normalize(newdir);
 
 
 	// Compute the BRDF for this ray (assuming Lambertian reflection)
+	// if i = 2 for the eye, then we have the normal being the focalLength-vector rotated according to camera. But we 
+	// won't rotate camera for now, so just focalLength vector
+
+	/* calculating p_i */
+	float g = G(subPath[i-1].normal, normal, point.position - r.o);
+	const float p = 1 /(2.f*PI); // dot between normal and origin ray (ONLY FOR EYE PATH) (THIS ONE IS USED ONLY FOR LAMBERTIAN REFLECTION SINCE OTHERWISE THE BRDF CANCEL EACH OTHER OUT)
+	
+	float p_i = p * g * subPath[i-1].p;
+
+	/* calculating C_i */
+
+	vec3 C_i;
+	if(i == 2){
+		C_i = subPath[i-1].c * subPath[i-1].p; // ska egentligen vara W1 och L1, men använder W0 och L0 och antar att spatial och directional light/measurement e samma
+	} else {
+		// Note: BRDF of last node, gotten from second last node, in direction of current node.
+		vec3 BRDF = triangles[subPath[i-1].surfaceIndex]->color / float(PI); // just the reflectance of the material / PI for Lambertian Reflection: http://www.oceanopticsbook.info/view/surfaces/lambertian_brdfs
+		C_i = BRDF * subPath[i-1].c / p;
+	}
+
+	subPath.push_back({p_i, C_i, point.triangleIndex, normal, point.position});
 
 	float cos_theta = glm::dot(newdir, normal); // note that the cosine factor is part of the Rendering Equation integrand/differential, NOT the BRDF.
-	vec3 BRDF = triangles[i.triangleIndex]->color / float(PI); // just the reflectance of the material / PI for Lambertian Reflection: http://www.oceanopticsbook.info/view/surfaces/lambertian_brdfs
 
-	// Probability distribution function for lambertian reflection BRDF
-	// const vec3 p = glm::abs(glm::dot(normal, -dir)) * BRDF; // dot between normal and origin ray (ONLY FOR EYE PATH) (THIS DOES NOT WORK WITH LAMBERTIAN REFLECTION SINCE THE BRDF EVALUATIONS WILL CANCEL EACH OTHER OUT AND YIELD A GRAY SCALE IMAGE)
-	const float p = 1 /(2.f*PI); // dot between normal and origin ray (ONLY FOR EYE PATH) (THIS ONE IS USED ONLY FOR LAMBERTIAN REFLECTION SINCE OTHERWISE THE BRDF CANCEL EACH OTHER OUT)
+	TracePath(Ray(newstart, newdir), subPath, i + 1, t);
 
-	// Recursively trace reflected light sources.
+	return;
+}
 
-	vec3 incoming = TracePath(newstart, newdir, depth + 1);
+/* connects all possible paths */
+/* right now, it is unweighted */
+vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
+	int s = lightPath.size();
+	int t = eyePath.size();
+	vec3 color;
 
+				cout << "hi " << endl;
 
-	// Apply the Rendering Equation here. Let ceiling triangle emit light
-	vec3 emittance = vec3(triangles[i.triangleIndex]->emission, triangles[i.triangleIndex]->emission, triangles[i.triangleIndex]->emission);
+	// s = 0
 
-	// light distance thingy is NOT needed because we only regard the light ocming from a point on an emitting surface, whereas the labs calculated some sort of 
-	// projected area onto the point light to deduce how much of the point light shines on the vertex. Further away, there are "less light" in a particular direction.
+	if(s == 0){
+		for(int i = 1; i < t; ++i){ // z_{0} is sorta defined, so we want this
+			float emission = triangles[eyePath[i].surfaceIndex]->emission;
+			color += vec3(emission, emission, emission); // our light is a sphere light which shoots same in every direction, this may not scale to other kinds of lights.
+		}
+					cout << "s == 0 " << endl;
 
-	//vec3 light = emittance/float(4.0f*PI*glm::length(start - newstart)*glm::length(start - newstart)); // calculate irradiance of light
-	// emittance = emittance * (glm::dot(surfaceToLight, normal) > 0.0f ? glm::dot(surfaceToLight, normal) : 0.f);
+		return color;
+	}
 
-	// assert(vec3(2, 3, 10) / vec3(2, 1, 5) == vec3(1, 3, 2));
+	// t = 0
 
-	vec3 res =  (BRDF / p * incoming * cos_theta);
-	// if(res.x > 0)
-	// 	cout  << res.x << " " << res.y << " " << res.z << endl;
+	if(t == 0){
+		// I'm supposed to use We but I cannot understand what it is; the only thing i dont grasp at all.
+		for(int i = 1; i < s; ++i){ // z_{0} is sorta defined, so we want this
+			// float emission = triangles[eyePath[i-1].triangleIndex]->emission;
+			// color += vec3(emission, emission, emission); // our light is a sphere light which shoots same in every direction, this may not scale to other kinds of lights.
+		}	
+					cout << "t == 0 " << endl;
 
-	return emittance + res;
+		return color;
+	}
+	
+			cout << "s, t > 0 " << endl;
 
+	// s, t > 0
+	for(int i = 1; i < s; ++i){
+		for(int j = 1; j < t; ++j){
+			cout << i << " " << j << endl;
+		    color += triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position); // * triangles[eyePath[j].surfaceIndex]->color / float(PI);
+			// if(!ClosestIntersection(lightPath[i].position, (eyePath[j].position - lightPath[i].position), triangles, otherObj)){
+			// 	continue;
+			// } else {
+			// 	if(otherObj.t < glm::length(lightPath[i].position - eyePath[j].position)){
+			// 		continue;
+			// 	} else {
+			// 		// Assume lambertian surface
+			// 		color += triangles[lightPath[i].surfaceIndex]->color / float(PI)
+			// 			  *  G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position)
+			// 			  *  triangles[eyePath[j].surfaceIndex]->color / float(PI);
+			// 	}
+			// }
+
+		}
+	}
+
+	return color;
+}
+
+// na = normal at a, nb = normal at b, ab = vector from a to b.
+float G(vec3 na, vec3 nb, vec3 ab){
+	float cosTheta = glm::dot(glm::normalize(na), glm::normalize(ab)); // angle between outgoing and normal at a
+	float cosThetaPrime = glm::dot(glm::normalize(na), glm::normalize(-ab)); // angle between ingoing and normal at b
+	return abs(cosTheta*cosThetaPrime) / glm::dot(ab, ab);
 }
