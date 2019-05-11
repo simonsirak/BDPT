@@ -72,7 +72,7 @@ mat3 P; // Pitch rotation matrix (around x axis)
 /* Model */
 vector<Obj*> triangles;
 
-int numSamples = 5;
+int numSamples = 25;
 
 /* Light source */
 vec3 lightPos( 0, -0.5, -0.7 );
@@ -517,19 +517,21 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 	for(int i = 1; i < s; ++i){
 		for(int j = 1; j < t; ++j){
 			cout << i << " " << j << endl;
-		    color += triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position); // * triangles[eyePath[j].surfaceIndex]->color / float(PI);
-			// if(!ClosestIntersection(lightPath[i].position, (eyePath[j].position - lightPath[i].position), triangles, otherObj)){
-			// 	continue;
-			// } else {
-			// 	if(otherObj.t < glm::length(lightPath[i].position - eyePath[j].position)){
-			// 		continue;
-			// 	} else {
-			// 		// Assume lambertian surface
-			// 		color += triangles[lightPath[i].surfaceIndex]->color / float(PI)
-			// 			  *  G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position)
-			// 			  *  triangles[eyePath[j].surfaceIndex]->color / float(PI);
-			// 	}
-			// }
+			Intersection otherObj;
+			if(!ClosestIntersection(lightPath[i].position, (eyePath[j].position - lightPath[i].position), triangles, otherObj)){
+				continue;
+			} else {
+				if(otherObj.t < glm::length(lightPath[i].position - eyePath[j].position)){
+					continue;
+				} else {
+					// Assume lambertian surface
+					// color += triangles[lightPath[i].surfaceIndex]->color / float(PI)
+					// 	  *  G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position)
+					// 	  *  triangles[eyePath[j].surfaceIndex]->color / float(PI);
+					/* This samamamich line is supposed to have that last commented out factor */ 
+					color += triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position); // * triangles[eyePath[j].surfaceIndex]->color / float(PI);
+				}
+			}
 
 		}
 	}
