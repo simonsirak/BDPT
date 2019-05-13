@@ -72,7 +72,7 @@ mat3 P; // Pitch rotation matrix (around x axis)
 /* Model */
 vector<Obj*> triangles;
 
-int numSamples = 50;
+int numSamples = 100;
 
 /* Light source */
 vec3 lightPos( 0, -0.5, -0.7 );
@@ -239,7 +239,7 @@ void Draw()
 
 				// P1, C1 for Light
 				Sphere * light = dynamic_cast<Sphere*>(triangles[triangles.size()-1]);
-				float p1 = float(1/(light->r*light->r*4*PI*4*PI)); // probability is 1/(AreaOfLight*2PI)
+				float p1 = float(1/(light->r*light->r*4*PI*2*PI*2*PI)); // probability is 1/(AreaOfLight*2PI), then another 2PI for choosing arbitrary direction
 				lightPath.push_back({p1, vec3(light->emission/p1,light->emission/p1,light->emission/p1), int(triangles.size()-1), newdir, light->c + float(light->r)*newdir}); // light is on last index
 
 				// P1, C1 for Eye
@@ -247,16 +247,16 @@ void Draw()
 				// We calculation: http://rendering-memo.blogspot.com/2016/03/bidirectional-path-tracing-3-importance.html
 				float cosTheta = glm::normalize(dir).z; // think about the focalLength triangle, we want the angle.
 				float G = cosTheta*cosTheta / (dir.length() * dir.length());
-				float We = float(1 / (1 * G)); // 1 / (AreaOfFilmAkaPixel * G), vi använder inte lens, vi kör 0-size aperture
+				float We = 1; // float(1 / (1 * G)); // 1 / (AreaOfFilmAkaPixel * G), vi använder inte lens, vi kör 0-size aperture
 				eyePath.push_back({p1, vec3(We/p1,We/p1,We/p1), -1, glm::normalize(normal), vec3()}); // surface of a pixel is not really a collided surface
 
 				// Trace eye path
-				TracePath(Ray(cameraPos, dir), eyePath, 2, 4);
+				TracePath(Ray(cameraPos, dir), eyePath, 2, 5);
 
 				// Trace light path
 
 				// for now, direction of ray = direction from center to point. Should change to random hemisphere direction later.
-				TracePath(Ray(light->c + float(light->r + 0.001f)*newdir, newnewdir), lightPath, 2, 4);
+				TracePath(Ray(light->c + float(light->r + 0.001f)*newdir, newnewdir), lightPath, 2, 5);
 
 				buffer[x][y] += connect(lightPath, eyePath) / float(numSamples);
 
@@ -493,8 +493,10 @@ void TracePath(Ray r, vector<Vertex>& subPath, int i, int t) {
 /* connects all possible paths */
 /* right now, it is unweighted */
 vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
-	int s = lightPath.size();
-	int t = eyePath.size();
+	int s = lightPath.size() - 1;
+	int t = eyePath.size() - 1;
+	vector<Vertex> path(lightPath);
+	path.insert(path.end(), eyePath.begin(), eyePath.end());
 	vec3 color;
 
 				//cout << "hi " << endl;
@@ -502,23 +504,44 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 
 	float p2sumInv = 1/((s+t+1)*1/((2*PI)*(2*PI)));
 
-	if(s == 0){
-		for(int i = 2; i < t; ++i){ // z_{0} is sorta defined, so we want this
+	int k = s + t - 1;
+	vector<float> p(k + 2, 0.f);
+	p[s] = 1;
+
+	//cout << "Max size is: " << path.size() << endl;
+
+	for(int i = s; i <= k; ++i){
+		p[i+1] = path[i].p / path[s + t - i].p * p[i]; 
+		//cout << i << endl;
+	}
+
+	for(int i = s - 1; i >= 0; --i){
+		p[i] = path[s + t - i].p / path[i].p * p[i+1]; 
+		//cout << i << endl;
+	}
+
+	float p2sum = 0;
+	for(int i = 0; i <= k+1; ++i){
+		p2sum += p[i]*p[i];
+	}
+
+	if(s == 1){
+		for(int i = 2; i <= t; ++i){ // z_{0} is sorta defined, so we want this
 			float emission = triangles[eyePath[i].surfaceIndex]->emission;
-			color += vec3(emission, emission, emission) * p2sumInv * lightPath[0].p * lightPath[0].p; // our light is a sphere light which shoots same in every direction, this may not scale to other kinds of lights.
+			color += vec3(emission, emission, emission) * eyePath[i].c * lightPath[1].c / p2sum; // our light is a sphere light which shoots same in every direction, this may not scale to other kinds of lights.
 		}
-					//cout << "s == 0 " << endl;
+					cout << "s == 0 " << endl;
 
 		return color;
 	}
 
 	// t = 0
 
-	if(t == 0){
+	if(t == 1){
 		// I'm supposed to use We but I cannot understand what it is; the only thing i dont grasp at all.
-		for(int i = 1; i < s; ++i){ // z_{0} is sorta defined, so we want this
-			// float emission = triangles[eyePath[i-1].triangleIndex]->emission;
-			// color += vec3(emission, emission, emission); // our light is a sphere light which shoots same in every direction, this may not scale to other kinds of lights.
+		for(int i = 2; i <= s; ++i){ // z_{0} is sorta defined, so we want this
+			// vec3 emission = eyePath[1].c * eyePath[1].p * p2sumInv * lightPath[0].p * lightPath[0].p; // triangles[eyePath[1].surfaceIndex]->emission;
+			// color += emission; // our light is a sphere light which shoots same in every direction, this may not scale to other kinds of lights.
 		}	
 					cout << "t == 0 " << endl;
 
@@ -528,8 +551,9 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 			//cout << "s, t > 0 " << endl;
 
 	// s, t > 0
-	for(int i = 1; i < s; ++i){
-		for(int j = 1; j < t; ++j){ // eye is not really a surface so im not counting it?
+
+	for(int i = 2; i <= s; ++i){
+		for(int j = 2; j <= t; ++j){ // eye is not really a surface so im not counting it?
 			//cout << i << " " << j << endl;
 			Intersection otherObj;
 			if(!ClosestIntersection(lightPath[i].position + 0.001f*lightPath[i].normal, (eyePath[j].position - lightPath[i].position), triangles, otherObj)){
@@ -542,7 +566,7 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 					color += lightPath[i].c * eyePath[j].c * triangles[lightPath[i].surfaceIndex]->color / float(PI)
 						  *  G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position)
 						  *  (j == 1 ? eyePath[j].c * eyePath[j].p : triangles[eyePath[j].surfaceIndex]->color) / float(PI)
-						  *  lightPath[i].p * lightPath[i].p * p2sumInv;
+						  / p2sum;
 					/* This samamamich line is supposed to have that last commented out factor */ 
 					//color += /*triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position);*/ triangles[eyePath[j].surfaceIndex]->color / float(PI);
 				}

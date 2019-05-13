@@ -257,8 +257,8 @@ void LoadTestModel( std::vector<Obj*>& triangles )
         }
 	}
 
-    triangles.push_back(new Sphere(0.15, vec3(0,  -0.5, -0.7)));
-    triangles[triangles.size()-1]->setMat(white, 0.1, 1);
+    triangles.push_back(new Sphere(0.05, vec3(0,  -0.5, -0.7)));
+    triangles[triangles.size()-1]->setMat(white, 3, 1);
 }
 
 #endif
