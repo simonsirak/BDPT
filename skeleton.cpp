@@ -208,50 +208,7 @@ void Draw()
                 dir = R * dir; // direction is rotated by camera rotation matrix
                 dir = glm::normalize(dir); // normalize direction, crucial!!
 
-                vec3 color( 0, 0, 0 );
-
-				std::uniform_real_distribution<float> dis(0, 1.0);
-				float theta0 = 2*float(PI)*dis(rd);
-				float theta1 = acos(1 - 2*dis(rd));
-				vec3 lightDir = glm::normalize(vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)));
-				
-				BDPTpath path;
-				path.startP = {cameraPos, vec3(0,0,0), -1, -1}; // normal not needed
-				Sphere* lightSource = dynamic_cast<Sphere*>(triangles[triangles.size()-1]);
-				path.endP = {lightSource->c + (float(lightSource->r) + 0.001f)*lightDir, -lightDir, -1, triangles.size()-1}; // normal not needed
-				vector<Intersection> cameraIntersections;
-				FindPath(path.startP.position, dir, 4, cameraIntersections);
-				vector<Intersection> lightIntersections;
-				FindPath(path.endP.position, lightDir, 4, lightIntersections);
-
-				cout << cameraIntersections.size() << endl;
-				//cout << lightIntersections.size() << endl;
-
-				if(cameraIntersections.size() == 0 || lightIntersections.size() == 0){ // nothing was hit
-					continue;
-				}
-
-				Intersection& lastEye = cameraIntersections[cameraIntersections.size()-1];
-				Intersection& lastLight = lightIntersections[lightIntersections.size()-1];
-
-				Intersection i;
-				ClosestIntersection(lastEye.position, lastLight.position - lastEye.position, triangles, i);
-				if(i.t < glm::length(lastLight.position-lastEye.position)){ // something is blocking, don't add connection
-					continue;
-				}
-
-				for(int i = 0 ; i < cameraIntersections.size() ; ++i){
-					path.intersections.push_back(cameraIntersections[i]);
-					//cout << i << endl;
-				}
-				for(int i = lightIntersections.size() - 1 ; i >= 0 ; --i){
-					path.intersections.push_back(lightIntersections[i]);
-				}
-
-				//color += calcRadianceToPoint(path, 0);
-				//color /= numSamples;
-
-				buffer[x][y] += (calcRadianceToPoint(path, 0) / float(numSamples));
+				buffer[x][y] += (TracePath(cameraPos, dir, 0) / float(numSamples));
 
                 PutPixelSDL( screen, x, y,  buffer[x][y]);
             }

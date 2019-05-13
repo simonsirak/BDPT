@@ -1,4 +1,4 @@
-#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
 
 #IncludeRegexScan: ^.*$
 
@@ -6,21 +6,21 @@
 
 #IncludeRegexTransform: 
 
-/afs/kth.se/home/s/s/ssirak/repo/BDPT/SDLauxiliary.h
+/repo/ssirak/github/BDPT/SDLauxiliary.h
 SDL.h
-/afs/kth.se/home/s/s/ssirak/repo/BDPT/SDL.h
+/repo/ssirak/github/BDPT/SDL.h
 iostream
 -
 glm/glm.hpp
 -
 
-/afs/kth.se/home/s/s/ssirak/repo/BDPT/TestModel.h
+/repo/ssirak/github/BDPT/TestModel.h
 glm/glm.hpp
 -
 vector
 -
 
-/afs/kth.se/home/s/s/ssirak/repo/BDPT/skeleton.cpp
+/repo/ssirak/github/BDPT/skeleton.cpp
 iostream
 -
 random
@@ -34,9 +34,9 @@ SDL.h
 cmath
 -
 SDLauxiliary.h
-/afs/kth.se/home/s/s/ssirak/repo/BDPT/SDLauxiliary.h
+/repo/ssirak/github/BDPT/SDLauxiliary.h
 TestModel.h
-/afs/kth.se/home/s/s/ssirak/repo/BDPT/TestModel.h
+/repo/ssirak/github/BDPT/TestModel.h
 cstdlib
 -
 ctime
