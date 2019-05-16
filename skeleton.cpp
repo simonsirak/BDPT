@@ -72,7 +72,7 @@ mat3 P; // Pitch rotation matrix (around x axis)
 /* Model */
 vector<Obj*> triangles;
 
-int numSamples = 100;
+int numSamples = 25;
 
 /* Light source */
 vec3 lightPos( 0, -0.5, -0.7 );
@@ -96,7 +96,9 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath);
 float pst(float ps, float pt);
 
 //vec3 TracePath(vec3 start, vec3 dir, int depth);
-void TracePath(Ray r, vector<Vertex>& subPath, int i, int t);
+int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance);
+int GenerateEyePath(int x, int y, vector<Vertex>& subPath, int maxDepth);
+int GenerateLightPath(vector<Vertex>& subPath, int maxDepth);
 
 vec3 DirectLight( const Intersection& i );
 
@@ -413,15 +415,104 @@ vec3 TracePath(vec3 start, vec3 dir, int depth) {
 
 }
 
-void TracePath(Ray r, vector<Vertex>& subPath, int i, int t) {
+int GenerateEyePath(int x, int y, vector<Vertex>& eyePath, int maxDepth){
 
-	if (i >= t) {
-		return;  // Bounced enough times
+	if(maxDepth == 0)
+		return 0;
+
+	vec3 normal(
+		0, 
+		0, 
+		focalLength
+	);
+
+	vec3 dir(
+		x-SCREEN_WIDTH/2.0f, 
+		y-SCREEN_HEIGHT/2.0f, 
+		focalLength
+	); 
+
+	normal = glm::normalize(R * normal);
+	dir = glm::normalize(R * dir); // direction is rotated by camera rotation matrix
+	eyePath.push_back({1, vec3(1,1,1), -1, vec3(), cameraPos}); // the probability up to this point is 1
+
+	return TracePath(Ray(cameraPos, dir), eyePath, maxDepth - 1, true) + 1;
+
+
+}
+
+int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
+
+	if(maxDepth == 0)
+		return 0;
+
+	float lightChoiceProb = 1; // only one light atm
+	float lightPosProb = float(1/(light->r*light->r*4*PI)); // 1 / Area
+	float lightDirProb = float(1/(2*PI)); // hemisphere uniform, not cosine weighted
+	float pointProb = lightChoiceProb * lightPosProb * lightDirProb;
+
+	std::uniform_real_distribution<float> dis(0, 1.0);
+
+	float theta0 = 2*PI*dis(rd);
+	float theta1 = acos(1 - 2*dis(rd));
+
+	// direction from center of sphere to go from
+	vec3 offset = glm::normalize(vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)));
+
+	theta0 = 2*PI*dis(rd);
+	theta1 = acos(1 - 2*dis(rd));
+
+	// direction of ray from point 
+	vec3 dir = glm::normalize(vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)));
+	dir = glm::dot(dir, offset) * offset / glm::dot(offset, offset);
+
+	Sphere * light = dynamic_cast<Sphere*>(triangles[triangles.size()-1]);
+	
+	vec3 Le = vec3(light->emission, light->emission, light->emission);
+	lightPath.push_back({1, vec3(1,1,1), -1, vec3(), vec3()}); 
+
+	//// note, not cosine weighted, we just calculate the cosine term of the LTE.
+	// vec3 Le = vec3(light->emission, light->emission, light->emission) * glm::dot(offset, dir) / pointProb;
+	return TracePath(Ray(light->c + float(light->r + 0.001f)*offset), dir, lightPath, maxDepth - 1) + 1;
+}
+
+int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance) {
+
+	if (maxDepth == 0) {
+		return 0;  // Bounced enough times
 	}
+
+	int bounces = 0;
+
+	/*
+	
+	IN LACK OF A BETTER PLACE TO COMMENT THIS:
+
+	The measurement equation is EZ. Look, the throughput function is incrementally calculated.
+	The rest of the integrand is then sampled one by one. In the beginning of the light path,
+	we calculate one "factor" of the throughput function. The beta will provide that factor, 
+	i.e "how much importance/radiance we have at this point". This is only for light path however.
+
+	For eye path, you begin on the other end of the measurement equation, i.e you calculate 
+	We. Then you incrementally multiply in the throughput function from this direction instead.
+
+	The connection procedure then attempts to "close" each sub path so that they have a light endpoint 
+	and a camera endpoint. 
+
+	The only thing that is not quite clear to me is why we use a PDFRev, or how it is calculated.
+
+	However it is important to note that the measurement equation is a sum of the contributions of all paths
+	in the scene onto a given pixel (if you think of the Path Integral form of LTE). A sample of the measured
+	radiance Ij in the measurement equation is calculated by summing the contributions from a few different strategies
+	achieved by connecting a light path and eye path. We then calculate many such samples and get a monte carlo
+	estimate of the correct measured radiance Ij, since at the end of the day, the above calculations were just
+	one sample of the Ij.
+	
+	*/
 
 	Intersection point;
 	if (!ClosestIntersection(r.o, r.d, triangles, point)) {
-		return;  // Nothing was hit.
+		return 0;  // Nothing was hit.
 	}
 
 	/*
@@ -484,10 +575,11 @@ void TracePath(Ray r, vector<Vertex>& subPath, int i, int t) {
 	float cos_theta = glm::dot(newdir, normal); // note that the cosine factor is part of the Rendering Equation integrand/differential, NOT the BRDF.
 
 	// don't continue if you are on light
+	int bounces = 0;
 	if(triangles[point.triangleIndex]->emission == 0)
-		TracePath(Ray(newstart + 0.001f*normal, newdir), subPath, i + 1, t);
+		bounces = TracePath(Ray(newstart + 0.001f*normal, newdir), subPath, t - 1);
 
-	return;
+	return bounces + 1;
 }
 
 /* connects all possible paths */
