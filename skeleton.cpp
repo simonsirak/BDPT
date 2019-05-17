@@ -256,13 +256,13 @@ void Draw()
 
 				// Trace eye path
 				//TracePath(Ray(cameraPos, dir), eyePath, 2, 5);
-				GenerateEyePath(x, y, eyePath, 7);
+				GenerateEyePath(x, y, eyePath, 6);
 
 				// Trace light path
 
 				// for now, direction of ray = direction from center to point. Should change to random hemisphere direction later.
 				//TracePath(Ray(light->c + float(light->r + 0.001f)*newdir, newnewdir), lightPath, 2, 5);
-				GenerateLightPath(lightPath, 3);
+				GenerateLightPath(lightPath, 6);
 
 				buffer[x][y] += connect(lightPath, eyePath) / float(numSamples);
 
@@ -441,7 +441,7 @@ int GenerateEyePath(int x, int y, vector<Vertex>& eyePath, int maxDepth){
 
 	// KEEP AN EYE OUT FOR THIS BETA, should be correct tho
 	vec3 We = vec3(1,1,1), beta = vec3(1,1,1); // for simplicity, one pixel is perfectly covered by one ray, so importance is 1.
-	eyePath.push_back({1, vec3(1,1,1), -1, vec3(), cameraPos}); // the probability up to this point is 1
+	eyePath.push_back({1, We, -1, normal, cameraPos}); // the probability up to this point is 1
 
 	return TracePath(Ray(cameraPos, dir), eyePath, maxDepth - 1, true, beta) + 1;
 }
@@ -474,7 +474,7 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
 	dir = glm::dot(dir, offset) * offset / glm::dot(offset, offset);
 
 	vec3 Le = vec3(light->emission, light->emission, light->emission);
-	lightPath.push_back({1, Le, -1, vec3(), vec3()}); 
+	lightPath.push_back({1, Le, int(triangles.size()-1), offset, light->c + float(light->r)*offset}); 
 
 	// the result is built up from this, which describes the "light" 
 	// that is carried over to the "next" ray in the path.
@@ -550,7 +550,7 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 
 		r1.d = glm::normalize(r1.d);
 		// enforce direction to be in correct hemisphere, aka project normal onto random vector and normalize
-		vec3 gnormal = triangles[point.triangleIndex]->normal(r1.o);
+		vec3 gnormal = glm::normalize(triangles[point.triangleIndex]->normal(r1.o));
 		vec3 snormal = glm::normalize(glm::dot(intersectionToOrigin, gnormal) * gnormal / glm::dot(gnormal, gnormal)); // HAS to be normalized after projection onto another vector.
 		r1.d = glm::normalize(glm::dot(r1.d, snormal) * r1.d / glm::dot(r1.d, r1.d));
 
@@ -564,7 +564,7 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 		float invDist2 = 1 / glm::dot(w, w);
 
 		// convert to area based density by applying solidangle-to-area conversion
-		vertex.p = prev.p * invDist2 * glm::abs(glm::dot(gnormal, glm::normalize(w)));
+		vertex.p = prev.p;// * invDist2 * glm::abs(glm::dot(gnormal, glm::normalize(w)));
 
 		// give old beta as the incoming at this intersection
 		vertex.c = beta;
@@ -585,10 +585,11 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 		vec3 brdf = triangles[vertex.surfaceIndex]->color / float(PI); 
 		vec3 wi = -glm::normalize(w);
 		beta *= (brdf * glm::abs(glm::dot(wi, snormal) / pdfFwd));
+		if(glm::length(beta) > 100)
+			cout << "Depth " << bounces+1 << ", beta: " << beta.x << " " << beta.y << " " << beta.z << endl;
 
 		// CHANGE THE RAY OBVIOUSLY
 		r = r1;
-		r.o += 0.01f*snormal;
 	}
 
 	/*
@@ -662,9 +663,9 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 			vec3 lightToPoint = glm::normalize(eyePath[i-2].position - last.position); // maybe i should cosine weight the emittance using this?
 			vec3 Le = vec3(triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission);
 			L = Le * last.c;
+			color += L * basicScale;
 		}
 
-		color += L * basicScale;
 	}
 
 	// t == 1: Skipped (pretty sure its pointless since we only have 1 direction and 1 point on the pixel to go from)
@@ -733,12 +734,12 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 				if(otherObj.t < glm::length(lightPath[i-1].position - eyePath[j-1].position)){
 					continue;
 				} else {
-					// Assume lambertian surface
-					// if(eyePath[j-1].c.x < 0 || eyePath[j-1].c.x > 1 || eyePath[j-1].c.y < 0 || eyePath[j-1].c.y > 1 || eyePath[j-1].c.z < 0 || eyePath[j-1].c.z > 1){
+					// // Assume lambertian surface
+					// if(eyePath[j-1].c.x < -10000 || eyePath[j-1].c.x > 10000 || eyePath[j-1].c.y < -10000 || eyePath[j-1].c.y > 10000 || eyePath[j-1].c.z < -10000 || eyePath[j-1].c.z > 10000){
 					// 	cout << eyePath[j-1].c.x << " " << eyePath[j-1].c.y << " " << eyePath[j-1].c.z << endl;
 					// 	continue;
 					// }
-					// if(lightPath[i-1].c.x < 0 || lightPath[i-1].c.x > 1 || lightPath[i-1].c.y < 0 || lightPath[i-1].c.y > 1 || lightPath[i-1].c.z < 0 || lightPath[i-1].c.z > 1){
+					// if(lightPath[i-1].c.x < -10000 || lightPath[i-1].c.x > 10000 || lightPath[i-1].c.y < -10000 || lightPath[i-1].c.y > 10000 || lightPath[i-1].c.z < -10000 || lightPath[i-1].c.z > 10000){
 					// 	cout << lightPath[i-1].c.x << " " << lightPath[i-1].c.y << " " << lightPath[i-1].c.z << endl;
 					// 	continue;
 					// }
