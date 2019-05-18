@@ -29,7 +29,8 @@ struct Intersection{
 };
 
 struct Vertex {
-	float p; // probability of reaching this particular vertex
+	float pdfFwd; // probability of reaching this particular vertex regular way
+	float pdfRev; // probability of reaching this particular vertex via reversed path (through the other kind of path)
 	vec3 c; // contribution from a path that crosses to the other sub-path from this vertex
 	int surfaceIndex; // index of surface collided with
 	vec3 normal; // correctly oriented normal of surface collided with
@@ -72,7 +73,7 @@ mat3 P; // Pitch rotation matrix (around x axis)
 /* Model */
 vector<Obj*> triangles;
 
-int numSamples = 25;
+int numSamples = 50;
 
 /* Light source */
 vec3 lightPos( 0, -0.5, -0.7 );
@@ -256,13 +257,13 @@ void Draw()
 
 				// Trace eye path
 				//TracePath(Ray(cameraPos, dir), eyePath, 2, 5);
-				GenerateEyePath(x, y, eyePath, 6);
+				GenerateEyePath(x, y, eyePath, 5);
 
 				// Trace light path
 
 				// for now, direction of ray = direction from center to point. Should change to random hemisphere direction later.
 				//TracePath(Ray(light->c + float(light->r + 0.001f)*newdir, newnewdir), lightPath, 2, 5);
-				GenerateLightPath(lightPath, 6);
+				GenerateLightPath(lightPath, 5);
 
 				buffer[x][y] += connect(lightPath, eyePath) / float(numSamples);
 
@@ -441,7 +442,7 @@ int GenerateEyePath(int x, int y, vector<Vertex>& eyePath, int maxDepth){
 
 	// KEEP AN EYE OUT FOR THIS BETA, should be correct tho
 	vec3 We = vec3(1,1,1), beta = vec3(1,1,1); // for simplicity, one pixel is perfectly covered by one ray, so importance is 1.
-	eyePath.push_back({1, We, -1, normal, cameraPos}); // the probability up to this point is 1
+	eyePath.push_back({1, 0, We, -1, normal, cameraPos}); // the probability up to this point is 1
 
 	return TracePath(Ray(cameraPos, dir), eyePath, maxDepth - 1, true, beta) + 1;
 }
@@ -471,10 +472,10 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
 
 	// direction of ray from point 
 	vec3 dir = glm::normalize(vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)));
-	dir = glm::dot(dir, offset) * offset / glm::dot(offset, offset);
+	dir = glm::normalize(glm::dot(dir, offset) * offset / glm::dot(offset, offset));
 
 	vec3 Le = vec3(light->emission, light->emission, light->emission);
-	lightPath.push_back({1, Le, int(triangles.size()-1), offset, light->c + float(light->r)*offset}); 
+	lightPath.push_back({1, 0, Le, int(triangles.size()-1), offset, light->c + float(light->r)*offset}); 
 
 	// the result is built up from this, which describes the "light" 
 	// that is carried over to the "next" ray in the path.
@@ -519,7 +520,7 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 	
 	*/
 
-	float pdfFwd = 1 / (2. * PI), pdfRev = 0;
+	float pdfFwd = glm::abs(glm::dot(subPath[0].normal, -r.d)) / (PI), pdfRev = 0;
 	// RNG vector in hemisphere
 	std::uniform_real_distribution<float> dis(0, 1.0);
 	while(true){
@@ -564,29 +565,37 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 		float invDist2 = 1 / glm::dot(w, w);
 
 		// convert to area based density by applying solidangle-to-area conversion
-		vertex.p = prev.p;// * invDist2 * glm::abs(glm::dot(gnormal, glm::normalize(w)));
-
+		vertex.pdfFwd = pdfFwd * invDist2 * glm::abs(glm::dot(gnormal, glm::normalize(w)));
+		vertex.pdfRev = pdfRev * invDist2 * glm::abs(glm::dot(gnormal, glm::normalize(w))); // idk what pdfRev will be used for but whatever
 		// give old beta as the incoming at this intersection
 		vertex.c = beta;
 
 		// insert vertex
 		subPath.push_back(vertex);
 
+		// don't include anything after a light source
 		if(triangles[point.triangleIndex]->emission > 0){
 			break;
 		}
 
 		// append whatever probability it will be to get the next vertex
-		pdfFwd *= 1 / (2. * PI);
-		pdfRev = 1 / (2. * PI) * invDist2 * glm::abs(glm::dot(gnormal, glm::normalize(w))); // idk what pdfRev will be used for but whatever
+		// actually, no. *= is incorrect. We want the 
+		// probability of specifically choosing this 
+		// new direction, nothing else. Otherwise beta will blow up.
+
+		// reverse is simulated as if the ray came 
+		pdfFwd = glm::abs(glm::dot(vertex.normal, -r1.d)) / (PI);
+		pdfRev = glm::abs(glm::dot(vertex.normal, r.d)) / (PI);
 
 		// append the contribution to the beta from the current intersection point 
 		// onto the future intersection points
 		vec3 brdf = triangles[vertex.surfaceIndex]->color / float(PI); 
 		vec3 wi = -glm::normalize(w);
-		beta *= (brdf * glm::abs(glm::dot(wi, snormal) / pdfFwd));
-		if(glm::length(beta) > 100)
-			cout << "Depth " << bounces+1 << ", beta: " << beta.x << " " << beta.y << " " << beta.z << endl;
+		beta *= (brdf * glm::abs(glm::dot(r1.d, snormal) / pdfFwd)); // THIS was the reason i got white lines, it's because i used the wrong direction (the outgoing as opposed to the incoming from the next point)
+		
+		// It should be allowed to be > 10, this was just for debugging
+		// if(glm::length(beta) > 10)
+		// 	cout << "Depth " << bounces+1 << ", beta: " << beta.x << " " << beta.y << " " << beta.z << endl;
 
 		// CHANGE THE RAY OBVIOUSLY
 		r = r1;
@@ -662,7 +671,7 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 			// get light emitted from last light to second last element of eyePAth
 			vec3 lightToPoint = glm::normalize(eyePath[i-2].position - last.position); // maybe i should cosine weight the emittance using this?
 			vec3 Le = vec3(triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission);
-			L = Le * last.c;
+			L = Le * last.c; // MAYBE LOOK HERE, DON'T USE LAST?
 			color += L * basicScale;
 		}
 
@@ -724,7 +733,7 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 
 	// // s, t > 0
 
-	for(int i = 2; i <= s; ++i){
+	for(int i = 1; i <= s; ++i){
 		for(int j = 2; j <= t; ++j){ // eye is not really a surface so im not counting it?
 			//cout << i << " " << j << endl;
 			Intersection otherObj;
