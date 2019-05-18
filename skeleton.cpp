@@ -41,8 +41,8 @@ struct Vertex {
 // GLOBAL VARIABLES
 
 /* Screen variables */
-const int SCREEN_WIDTH = 200;
-const int SCREEN_HEIGHT = 200;
+const int SCREEN_WIDTH = 400;
+const int SCREEN_HEIGHT = 400;
 SDL_Surface* screen;
 vec3 buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
 
@@ -73,7 +73,7 @@ mat3 P; // Pitch rotation matrix (around x axis)
 /* Model */
 vector<Obj*> triangles;
 
-int numSamples = 50;
+int numSamples = 150;
 
 /* Light source */
 vec3 lightPos( 0, -0.5, -0.7 );
@@ -94,7 +94,12 @@ bool ClosestIntersection(
 
 float G(vec3 na, vec3 nb, vec3 ab);
 vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath);
-float pst(float ps, float pt);
+float MIS(
+	vector<Vertex>& lightVertices, 
+	vector<Vertex>& eyeVertices, 
+	int s,
+	int t
+);
 
 //vec3 TracePath(vec3 start, vec3 dir, int depth);
 int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec3 beta);
@@ -454,11 +459,6 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
 
 	Sphere * light = dynamic_cast<Sphere*>(triangles[triangles.size()-1]);
 
-	float lightChoiceProb = 1; // only one light atm
-	float lightPosProb = float(1/(light->r*light->r*4*PI)); // 1 / Area
-	float lightDirProb = float(1/(2*PI)); // hemisphere uniform, not cosine weighted
-	float pointProb = lightChoiceProb * lightPosProb * lightDirProb;
-
 	std::uniform_real_distribution<float> dis(0, 1.0);
 
 	float theta0 = 2*PI*dis(rd);
@@ -474,8 +474,13 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
 	vec3 dir = glm::normalize(vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)));
 	dir = glm::normalize(glm::dot(dir, offset) * offset / glm::dot(offset, offset));
 
+	float lightChoiceProb = 1; // only one light atm
+	float lightPosProb = float(1/(light->r*light->r*4*PI)); // 1 / Area
+	float lightDirProb = float(glm::abs(glm::dot(offset, -dir))/PI); // hemisphere uniform, not cosine weighted
+	float pointProb = lightChoiceProb * lightPosProb * lightDirProb;
+
 	vec3 Le = vec3(light->emission, light->emission, light->emission);
-	lightPath.push_back({1, 0, Le, int(triangles.size()-1), offset, light->c + float(light->r)*offset}); 
+	lightPath.push_back({lightChoiceProb * lightPosProb, 0, Le, int(triangles.size()-1), offset, light->c + float(light->r)*offset}); 
 
 	// the result is built up from this, which describes the "light" 
 	// that is carried over to the "next" ray in the path.
@@ -486,6 +491,22 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
 	return TracePath(Ray(light->c + float(light->r + 0.001f)*offset, dir), lightPath, maxDepth - 1, false, beta) + 1;
 }
 
+/*
+	wi = the direction from next point to the intersection/current point.
+	wo = the direction from current/intersection point to previous point.
+
+	The reason for these to be seemingly "flipped" is because we are evaluating
+	a path backwards from some origin. So the "backwards/forward" is in relation
+	to the direction traveling in.
+
+	If we start in the eye, we want to transport radiance to the eye. 
+	So wi is correct, since that is the general direction to travel towards 
+	the eye. 
+
+	If we start in the light, we want to transport importance to the light. 
+	So wi is correct, since that is the general direction to travel towards 
+	the eye.
+*/
 int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec3 beta) {
 
 	if (maxDepth == 0) {
@@ -537,7 +558,7 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 			break;
 
 		Vertex vertex;
-		Vertex &prev = subPath[bounces];
+		Vertex &prev = subPath[bounces-1];
 
 		/* Process intersection data */
 		Ray r1;
@@ -566,12 +587,15 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 
 		// convert to area based density by applying solidangle-to-area conversion
 		vertex.pdfFwd = pdfFwd * invDist2 * glm::abs(glm::dot(gnormal, glm::normalize(w)));
-		vertex.pdfRev = pdfRev * invDist2 * glm::abs(glm::dot(gnormal, glm::normalize(w))); // idk what pdfRev will be used for but whatever
+
 		// give old beta as the incoming at this intersection
 		vertex.c = beta;
 
 		// insert vertex
 		subPath.push_back(vertex);
+
+		pdfRev = glm::abs(glm::dot(vertex.normal, r.d)) / (PI);
+		prev.pdfRev = pdfRev * invDist2 * glm::abs(glm::dot(prev.normal, glm::normalize(-w))); // idk what pdfRev will be used for but whatever
 
 		// don't include anything after a light source
 		if(triangles[point.triangleIndex]->emission > 0){
@@ -585,12 +609,12 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 
 		// reverse is simulated as if the ray came 
 		pdfFwd = glm::abs(glm::dot(vertex.normal, -r1.d)) / (PI);
-		pdfRev = glm::abs(glm::dot(vertex.normal, r.d)) / (PI);
 
 		// append the contribution to the beta from the current intersection point 
 		// onto the future intersection points
 		vec3 brdf = triangles[vertex.surfaceIndex]->color / float(PI); 
 		vec3 wi = -glm::normalize(w);
+		// one of the many nested surface integral samples
 		beta *= (brdf * glm::abs(glm::dot(r1.d, snormal) / pdfFwd)); // THIS was the reason i got white lines, it's because i used the wrong direction (the outgoing as opposed to the incoming from the next point)
 		
 		// It should be allowed to be > 10, this was just for debugging
@@ -672,16 +696,16 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 			vec3 lightToPoint = glm::normalize(eyePath[i-2].position - last.position); // maybe i should cosine weight the emittance using this?
 			vec3 Le = vec3(triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission);
 			L = Le * last.c; // MAYBE LOOK HERE, DON'T USE LAST?
-			color += L * basicScale;
+			color += L * MIS(lightPath, eyePath, 0, i);
 		}
 
 	}
 
 	// t == 1: Skipped (pretty sure its pointless since we only have 1 direction and 1 point on the pixel to go from)
 
-	// s == 1:
+	// s == 1: Also kinda skipped, but is done in the other for loops by not recalculating the light sample but instead trying to connect it.
 
-
+	
 
 	// float p2sumInv = 1/((s+t+1)*1/((2*PI)*(2*PI)));
 
@@ -731,37 +755,37 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 	
 	// 		//cout << "s, t > 0 " << endl;
 
-	// // s, t > 0
+	// s, t > 1
 
-	// for(int i = 1; i <= s; ++i){
-	// 	for(int j = 2; j <= t; ++j){ // eye is not really a surface so im not counting it?
-	// 		//cout << i << " " << j << endl;
-	// 		Intersection otherObj;
-	// 		if(!ClosestIntersection(lightPath[i-1].position + 0.0001f*lightPath[i-1].normal, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
-	// 			continue;
-	// 		} else {
-	// 			if(otherObj.t < glm::length(lightPath[i-1].position - eyePath[j-1].position)){
-	// 				continue;
-	// 			} else {
-	// 				// // Assume lambertian surface
-	// 				// if(eyePath[j-1].c.x < -10000 || eyePath[j-1].c.x > 10000 || eyePath[j-1].c.y < -10000 || eyePath[j-1].c.y > 10000 || eyePath[j-1].c.z < -10000 || eyePath[j-1].c.z > 10000){
-	// 				// 	cout << eyePath[j-1].c.x << " " << eyePath[j-1].c.y << " " << eyePath[j-1].c.z << endl;
-	// 				// 	continue;
-	// 				// }
-	// 				// if(lightPath[i-1].c.x < -10000 || lightPath[i-1].c.x > 10000 || lightPath[i-1].c.y < -10000 || lightPath[i-1].c.y > 10000 || lightPath[i-1].c.z < -10000 || lightPath[i-1].c.z > 10000){
-	// 				// 	cout << lightPath[i-1].c.x << " " << lightPath[i-1].c.y << " " << lightPath[i-1].c.z << endl;
-	// 				// 	continue;
-	// 				// }
-	// 				color += lightPath[i-1].c * eyePath[j-1].c * triangles[lightPath[i-1].surfaceIndex]->color / float(PI)
-	// 					  *  G(lightPath[i-1].normal, eyePath[j-1].normal, eyePath[j-1].position - lightPath[i-1].position)
-	// 					  *  triangles[eyePath[j-1].surfaceIndex]->color / float(PI)
-	// 					  *  basicScale;
-	// 				/* This samamamich line is supposed to have that last commented out factor */ 
-	// 				//color += /*triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position);*/ triangles[eyePath[j].surfaceIndex]->color / float(PI);
-	// 			}
-	// 		}
-	// 	}
-	// }
+	for(int i = 1; i <= s; ++i){
+		for(int j = 2; j <= t; ++j){ // eye is not really a surface so im not counting it?
+			//cout << i << " " << j << endl;
+			Intersection otherObj;
+			if(!ClosestIntersection(lightPath[i-1].position + 0.0001f*lightPath[i-1].normal, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
+				continue;
+			} else {
+				if(otherObj.triangleIndex != eyePath[j-1].surfaceIndex){
+					continue;
+				} else {
+					// // Assume lambertian surface
+					// if(eyePath[j-1].c.x < -10000 || eyePath[j-1].c.x > 10000 || eyePath[j-1].c.y < -10000 || eyePath[j-1].c.y > 10000 || eyePath[j-1].c.z < -10000 || eyePath[j-1].c.z > 10000){
+					// 	cout << eyePath[j-1].c.x << " " << eyePath[j-1].c.y << " " << eyePath[j-1].c.z << endl;
+					// 	continue;
+					// }
+					// if(lightPath[i-1].c.x < -10000 || lightPath[i-1].c.x > 10000 || lightPath[i-1].c.y < -10000 || lightPath[i-1].c.y > 10000 || lightPath[i-1].c.z < -10000 || lightPath[i-1].c.z > 10000){
+					// 	cout << lightPath[i-1].c.x << " " << lightPath[i-1].c.y << " " << lightPath[i-1].c.z << endl;
+					// 	continue;
+					// }
+					color += lightPath[i-1].c * eyePath[j-1].c * triangles[lightPath[i-1].surfaceIndex]->color / float(PI)
+						  *  G(lightPath[i-1].normal, eyePath[j-1].normal, eyePath[j-1].position - lightPath[i-1].position)
+						  *  triangles[eyePath[j-1].surfaceIndex]->color / float(PI)
+						  *  MIS(lightPath, eyePath, i, j);
+					/* This samamamich line is supposed to have that last commented out factor */ 
+					//color += /*triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position);*/ triangles[eyePath[j].surfaceIndex]->color / float(PI);
+				}
+			}
+		}
+	}
 
 	return color; // divided by probability of getting this measurement, since we are using monte carlo ???
 }
@@ -773,6 +797,34 @@ float G(vec3 na, vec3 nb, vec3 ab){
 	return abs(cosTheta*cosThetaPrime) / glm::dot(ab, ab);
 }
 
-float pst(float ps, float pt){
-	return ps * pt;
+float MIS(
+	vector<Vertex>& lightVertices, 
+	vector<Vertex>& eyeVertices, 
+	int s,
+	int t
+) {
+	if (s + t == 2) return 1;
+    float sumRi = 0;
+
+    // Define helper function _remap0_ that deals with Dirac delta functions
+	// e.g the beginning positional probability of the camera, which is 1 for 
+	// one point of the pixel, and 0 everywhere else. This is never reached 
+	// here tho, but it's just an example of a delta function.
+    auto remap0 = [](float f) -> float { return f != 0 ? f : 1; };
+
+	// Consider hypothetical connection strategies along the camera subpath
+    float ri = 1;
+    for (int i = t - 1; i > 0; --i) {
+        ri *=
+            remap0(eyeVertices[i].pdfRev) / remap0(eyeVertices[i].pdfFwd);
+        sumRi += ri;
+    }
+
+    // Consider hypothetical connection strategies along the light subpath
+    ri = 1;
+    for (int i = s - 1; i >= 0; --i) {
+        ri *= remap0(lightVertices[i].pdfRev) / remap0(lightVertices[i].pdfFwd);
+        sumRi += ri;
+    }
+    return 1 / (1 + sumRi);
 }
