@@ -733,35 +733,35 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 
 	// // s, t > 0
 
-	for(int i = 1; i <= s; ++i){
-		for(int j = 2; j <= t; ++j){ // eye is not really a surface so im not counting it?
-			//cout << i << " " << j << endl;
-			Intersection otherObj;
-			if(!ClosestIntersection(lightPath[i-1].position + 0.0001f*lightPath[i-1].normal, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
-				continue;
-			} else {
-				if(otherObj.t < glm::length(lightPath[i-1].position - eyePath[j-1].position)){
-					continue;
-				} else {
-					// // Assume lambertian surface
-					// if(eyePath[j-1].c.x < -10000 || eyePath[j-1].c.x > 10000 || eyePath[j-1].c.y < -10000 || eyePath[j-1].c.y > 10000 || eyePath[j-1].c.z < -10000 || eyePath[j-1].c.z > 10000){
-					// 	cout << eyePath[j-1].c.x << " " << eyePath[j-1].c.y << " " << eyePath[j-1].c.z << endl;
-					// 	continue;
-					// }
-					// if(lightPath[i-1].c.x < -10000 || lightPath[i-1].c.x > 10000 || lightPath[i-1].c.y < -10000 || lightPath[i-1].c.y > 10000 || lightPath[i-1].c.z < -10000 || lightPath[i-1].c.z > 10000){
-					// 	cout << lightPath[i-1].c.x << " " << lightPath[i-1].c.y << " " << lightPath[i-1].c.z << endl;
-					// 	continue;
-					// }
-					color += lightPath[i-1].c * eyePath[j-1].c * triangles[lightPath[i-1].surfaceIndex]->color / float(PI)
-						  *  G(lightPath[i-1].normal, eyePath[j-1].normal, eyePath[j-1].position - lightPath[i-1].position)
-						  *  triangles[eyePath[j-1].surfaceIndex]->color / float(PI)
-						  *  basicScale;
-					/* This samamamich line is supposed to have that last commented out factor */ 
-					//color += /*triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position);*/ triangles[eyePath[j].surfaceIndex]->color / float(PI);
-				}
-			}
-		}
-	}
+	// for(int i = 1; i <= s; ++i){
+	// 	for(int j = 2; j <= t; ++j){ // eye is not really a surface so im not counting it?
+	// 		//cout << i << " " << j << endl;
+	// 		Intersection otherObj;
+	// 		if(!ClosestIntersection(lightPath[i-1].position + 0.0001f*lightPath[i-1].normal, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
+	// 			continue;
+	// 		} else {
+	// 			if(otherObj.t < glm::length(lightPath[i-1].position - eyePath[j-1].position)){
+	// 				continue;
+	// 			} else {
+	// 				// // Assume lambertian surface
+	// 				// if(eyePath[j-1].c.x < -10000 || eyePath[j-1].c.x > 10000 || eyePath[j-1].c.y < -10000 || eyePath[j-1].c.y > 10000 || eyePath[j-1].c.z < -10000 || eyePath[j-1].c.z > 10000){
+	// 				// 	cout << eyePath[j-1].c.x << " " << eyePath[j-1].c.y << " " << eyePath[j-1].c.z << endl;
+	// 				// 	continue;
+	// 				// }
+	// 				// if(lightPath[i-1].c.x < -10000 || lightPath[i-1].c.x > 10000 || lightPath[i-1].c.y < -10000 || lightPath[i-1].c.y > 10000 || lightPath[i-1].c.z < -10000 || lightPath[i-1].c.z > 10000){
+	// 				// 	cout << lightPath[i-1].c.x << " " << lightPath[i-1].c.y << " " << lightPath[i-1].c.z << endl;
+	// 				// 	continue;
+	// 				// }
+	// 				color += lightPath[i-1].c * eyePath[j-1].c * triangles[lightPath[i-1].surfaceIndex]->color / float(PI)
+	// 					  *  G(lightPath[i-1].normal, eyePath[j-1].normal, eyePath[j-1].position - lightPath[i-1].position)
+	// 					  *  triangles[eyePath[j-1].surfaceIndex]->color / float(PI)
+	// 					  *  basicScale;
+	// 				/* This samamamich line is supposed to have that last commented out factor */ 
+	// 				//color += /*triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position);*/ triangles[eyePath[j].surfaceIndex]->color / float(PI);
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	return color; // divided by probability of getting this measurement, since we are using monte carlo ???
 }
