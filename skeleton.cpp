@@ -351,7 +351,7 @@ vec3 DirectLight( const Intersection& i ){
 	*/
 
 	Intersection blocker;
-	if(ClosestIntersection(i.position + normal * 0.00001f, (lightPos - i.position), triangles, blocker) && glm::length(blocker.position - i.position) <= glm::length(lightPos-i.position)){
+	if(ClosestIntersection(i.position, (lightPos - i.position), triangles, blocker) && glm::length(blocker.position - i.position) <= glm::length(lightPos-i.position)){
 		return vec3(0, 0, 0);
 	} else {
 		return triangles[i.triangleIndex]->color * light * (glm::dot(radius, normal) > 0.0f ? glm::dot(radius, normal) : 0.0f);
@@ -488,7 +488,7 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
 
 	//// note, not cosine weighted, we just calculate the cosine term of the LTE.
 	// vec3 Le = vec3(light->emission, light->emission, light->emission) * glm::dot(offset, dir) / pointProb;
-	return TracePath(Ray(light->c + float(light->r + 0.00001f)*offset, dir), lightPath, maxDepth - 1, false, beta) + 1;
+	return TracePath(Ray(light->c + float(light->r)*offset, dir), lightPath, maxDepth - 1, false, beta) + 1;
 }
 
 /*
@@ -594,13 +594,13 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 		// insert vertex
 		subPath.push_back(vertex);
 
-		pdfRev = glm::abs(glm::dot(vertex.normal, r.d)) / (PI);
-		prev.pdfRev = pdfRev * invDist2 * glm::abs(glm::dot(prev.normal, glm::normalize(-w))); // idk what pdfRev will be used for but whatever
-
 		// don't include anything after a light source
 		if(triangles[point.triangleIndex]->emission > 0){
 			break;
 		}
+
+		pdfRev = glm::abs(glm::dot(vertex.normal, r.d)) / (PI);
+		prev.pdfRev = pdfRev * invDist2 * glm::abs(glm::dot(prev.normal, glm::normalize(-w))); // idk what pdfRev will be used for but whatever
 
 		// append whatever probability it will be to get the next vertex
 		// actually, no. *= is incorrect. We want the 
@@ -761,7 +761,7 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 		for(int j = 2; j <= t; ++j){ // eye is not really a surface so im not counting it?
 			//cout << i << " " << j << endl;
 			Intersection otherObj;
-			if(!ClosestIntersection(lightPath[i-1].position + 0.00001f*lightPath[i-1].normal, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
+			if(!ClosestIntersection(lightPath[i-1].position, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
 				continue;
 			} else {
 				if(otherObj.triangleIndex != eyePath[j-1].surfaceIndex){
