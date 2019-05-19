@@ -74,7 +74,7 @@ mat3 P; // Pitch rotation matrix (around x axis)
 /* Model */
 vector<Obj*> triangles;
 
-int numSamples = 150;
+int numSamples = 50;
 
 /* Light source */
 vec3 lightPos( 0, -0.5, -0.7 );
@@ -322,11 +322,24 @@ vec3 DirectLight( const Intersection& i ){
 	
 	// get radius from sphere defined by light position 
 	// and the point of intersection.
-	Sphere * light = dynamic_cast<Sphere*>(triangles[triangles.size()-1]);
-	vec3 radius = (light->c - i.position); // should sample a point but w/e
+	Sphere * src = dynamic_cast<Sphere*>(triangles[triangles.size()-1]);
 
-	vec3 light = vec3(light->emission,light->emission,light->emission); // calculate emittance of light
+	vec3 light = vec3(src->emission,src->emission,src->emission); // calculate emittance of light
 
+	std::uniform_real_distribution<float> dis(0, 1.0);
+
+	float theta0 = 2*PI*dis(rd);
+	float theta1 = acos(1 - 2*dis(rd));
+
+	// direction from center of sphere to go from
+	vec3 offset = glm::normalize(vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)));
+
+	theta0 = 2*PI*dis(rd);
+	theta1 = acos(1 - 2*dis(rd));
+
+	// direction of ray from point 
+	vec3 dir = glm::normalize(vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)));
+	dir = glm::normalize(glm::dot(dir, offset) * offset / glm::dot(offset, offset));
 	/* 
 		calculate normal in direction based on source of ray
 		for the "first ray", it is the camera position that 
@@ -343,6 +356,9 @@ vec3 DirectLight( const Intersection& i ){
 		of the surface.
 	*/
 
+	vec3 lightPos = src->c + float(src->r)*offset;
+	vec3 radius = (lightPos - i.position);
+
 
 	vec3 sourceToLight = cameraPos - i.position;
 	vec3 normal = glm::dot(sourceToLight, triangles[i.triangleIndex]->normal(i.position)) * triangles[i.triangleIndex]->normal(i.position) / glm::dot(triangles[i.triangleIndex]->normal(i.position), triangles[i.triangleIndex]->normal(i.position));
@@ -358,10 +374,14 @@ vec3 DirectLight( const Intersection& i ){
 
 	Intersection blocker;
 	blocker.triangleIndex = i.triangleIndex;
-	if(ClosestIntersection(i.position, (light->c - i.position), triangles, blocker) && blocker.t < glm::length(light->c-i.position)){
+	if(!ClosestIntersection(i.position, (lightPos - i.position), triangles, blocker)){
 		return vec3(0, 0, 0);
 	} else {
-		return (triangles[i.triangleIndex]->color / float(PI)) / (float(1/(light->r*light->r*4*PI)) * 1 / (2 * PI)) * light * (glm::dot(radius, normal) > 0.0f ? glm::dot(radius, normal) : 0.0f);
+		if(blocker.triangleIndex != triangles.size()-1){ // sphere index
+			return vec3(0,0,0);
+		} else {
+			return (triangles[i.triangleIndex]->color / float(PI)) / float(float(1/(src->r*src->r*4*PI)) * 1 / (2 * PI)) * light * (glm::dot(glm::normalize(radius), normal) > 0.0f ? glm::dot(glm::normalize(radius), normal) : 0.0f);
+		}
 	}
 }
 
@@ -694,19 +714,19 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 	//path.insert(path.end(), eyePath.begin(), eyePath.end());
 	vec3 color;
 
-	// s == 0
-	vec3 L;
-	for(int i = 2; i <= t; ++i){
-		Vertex &last = eyePath[i-1];
-		if(triangles[last.surfaceIndex]->emission > 0){
-			// get light emitted from last light to second last element of eyePAth
-			vec3 lightToPoint = glm::normalize(eyePath[i-2].position - last.position); // maybe i should cosine weight the emittance using this?
-			vec3 Le = vec3(triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission);
-			L = Le * last.c; // MAYBE LOOK HERE, DON'T USE LAST?
-			color += L * MIS(lightPath, eyePath, 0, i);
-		}
+	// // // s == 0
+	// vec3 L;
+	// for(int i = 2; i <= t; ++i){
+	// 	Vertex &last = eyePath[i-1];
+	// 	if(triangles[last.surfaceIndex]->emission > 0){
+	// 		// get light emitted from last light to second last element of eyePAth
+	// 		vec3 lightToPoint = glm::normalize(eyePath[i-2].position - last.position); // maybe i should cosine weight the emittance using this?
+	// 		vec3 Le = vec3(triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission);
+	// 		L = Le * last.c; // MAYBE LOOK HERE, DON'T USE LAST?
+	// 		color += L * MIS(lightPath, eyePath, 0, i);
+	// 	}
 
-	}
+	// }
 
 	// t == 1: Skipped (pretty sure its pointless since we only have 1 direction and 1 point on the pixel to go from)
 
@@ -714,7 +734,7 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 
 	// s == 1, t == 1:
 	Intersection obj;
-	if(ClosestIntersection(cameraPos, eyeVertices[0].dir, triangles, obj)){
+	if(ClosestIntersection(cameraPos, eyePath[0].dir, triangles, obj)){
 		color += DirectLight(obj) * MIS(lightPath, eyePath, 1, 1);
 	}
 
