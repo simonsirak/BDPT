@@ -35,6 +35,7 @@ struct Vertex {
 	int surfaceIndex; // index of surface collided with
 	vec3 normal; // correctly oriented normal of surface collided with
 	vec3 position;
+	vec3 dir; // rly only relevant to eye endpoint
 };
 
 // ----------------------------------------------------------------------------
@@ -321,11 +322,10 @@ vec3 DirectLight( const Intersection& i ){
 	
 	// get radius from sphere defined by light position 
 	// and the point of intersection.
-	vec3 radius = (lightPos - i.position);
-	float r2 = glm::length(radius)*glm::length(radius); // r^2
-	radius = glm::normalize(radius); // normalize for future calculations
+	Sphere * light = dynamic_cast<Sphere*>(triangles[triangles.size()-1]);
+	vec3 radius = (light->c - i.position); // should sample a point but w/e
 
-	vec3 light = lightColor/float(4.0f*PI*r2); // calculate irradiance of light
+	vec3 light = vec3(light->emission,light->emission,light->emission); // calculate emittance of light
 
 	/* 
 		calculate normal in direction based on source of ray
@@ -343,6 +343,7 @@ vec3 DirectLight( const Intersection& i ){
 		of the surface.
 	*/
 
+
 	vec3 sourceToLight = cameraPos - i.position;
 	vec3 normal = glm::dot(sourceToLight, triangles[i.triangleIndex]->normal(i.position)) * triangles[i.triangleIndex]->normal(i.position) / glm::dot(triangles[i.triangleIndex]->normal(i.position), triangles[i.triangleIndex]->normal(i.position));
 	normal = glm::normalize(normal);
@@ -356,10 +357,11 @@ vec3 DirectLight( const Intersection& i ){
 	*/
 
 	Intersection blocker;
-	if(ClosestIntersection(i.position, (lightPos - i.position), triangles, blocker) && glm::length(blocker.position - i.position) <= glm::length(lightPos-i.position)){
+	blocker.triangleIndex = i.triangleIndex;
+	if(ClosestIntersection(i.position, (light->c - i.position), triangles, blocker) && blocker.t < glm::length(light->c-i.position)){
 		return vec3(0, 0, 0);
 	} else {
-		return triangles[i.triangleIndex]->color * light * (glm::dot(radius, normal) > 0.0f ? glm::dot(radius, normal) : 0.0f);
+		return (triangles[i.triangleIndex]->color / float(PI)) / (float(1/(light->r*light->r*4*PI)) * 1 / (2 * PI)) * light * (glm::dot(radius, normal) > 0.0f ? glm::dot(radius, normal) : 0.0f);
 	}
 }
 
@@ -452,7 +454,7 @@ int GenerateEyePath(int x, int y, vector<Vertex>& eyePath, int maxDepth){
 
 	// KEEP AN EYE OUT FOR THIS BETA, should be correct tho
 	vec3 We = vec3(1,1,1), beta = vec3(1,1,1); // for simplicity, one pixel is perfectly covered by one ray, so importance is 1.
-	eyePath.push_back({1, 0, We, -1, normal, cameraPos}); // the probability up to this point is 1
+	eyePath.push_back({1, 0, We, -1, normal, cameraPos, dir}); // the probability up to this point is 1
 
 	return TracePath(Ray(cameraPos, dir), eyePath, maxDepth - 1, true, beta) + 1;
 }
@@ -485,7 +487,7 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
 	float pointProb = lightChoiceProb * lightPosProb * lightDirProb;
 
 	vec3 Le = vec3(light->emission, light->emission, light->emission);
-	lightPath.push_back({lightChoiceProb * lightPosProb, 0, Le, int(triangles.size()-1), offset, light->c + float(light->r)*offset}); 
+	lightPath.push_back({lightChoiceProb * lightPosProb, 0, Le, int(triangles.size()-1), offset, light->c + float(light->r)*offset, dir}); 
 
 	// the result is built up from this, which describes the "light" 
 	// that is carried over to the "next" ray in the path.
@@ -710,7 +712,11 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 
 	// s == 1: Also kinda skipped, but is done in the other for loops by not recalculating the light sample but instead trying to connect it.
 
-	
+	// s == 1, t == 1:
+	Intersection obj;
+	if(ClosestIntersection(cameraPos, eyeVertices[0].dir, triangles, obj)){
+		color += DirectLight(obj) * MIS(lightPath, eyePath, 1, 1);
+	}
 
 	// float p2sumInv = 1/((s+t+1)*1/((2*PI)*(2*PI)));
 
@@ -764,6 +770,9 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 
 	for(int i = 1; i <= s; ++i){
 		for(int j = 2; j <= t; ++j){ // eye is not really a surface so im not counting it?
+			if(i == 1 && j == 1) // already done by DirectLight, so don't add
+				continue;
+
 			//cout << i << " " << j << endl;
 			Intersection otherObj;
 			otherObj.triangleIndex = lightPath[i-1].surfaceIndex; // previous vertex
