@@ -294,8 +294,13 @@ bool ClosestIntersection(
 	closestIntersection.t = std::numeric_limits<float>::max();
 	dir = glm::normalize(dir); // does not matter what you do here, the t aka x.x will adjust the length. No need to normalize
     Ray r(start, dir);
+
+	int originalTriangle = closestIntersection.triangleIndex;
 	
     for(int i = 0; i < triangles.size(); ++i){
+		if(i == originalTriangle)
+			continue;
+
 		const Obj* triangle = triangles[i];
 		double t = triangle->intersect(r);
         if(t > 0 && t < closestIntersection.t){ // 0.001 is small epsilon to prevent self intersection
@@ -476,7 +481,7 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
 
 	float lightChoiceProb = 1; // only one light atm
 	float lightPosProb = float(1/(light->r*light->r*4*PI)); // 1 / Area
-	float lightDirProb = float(glm::abs(glm::dot(offset, -dir))/PI); // hemisphere uniform, not cosine weighted
+	float lightDirProb = float(1)/((2 * PI)); // hemisphere uniform, not cosine weighted
 	float pointProb = lightChoiceProb * lightPosProb * lightDirProb;
 
 	vec3 Le = vec3(light->emission, light->emission, light->emission);
@@ -541,11 +546,12 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 	
 	*/
 
-	float pdfFwd = glm::abs(glm::dot(subPath[0].normal, -r.d)) / (PI), pdfRev = 0;
+	float pdfFwd = 1 / (2 * PI), pdfRev = 0;
 	// RNG vector in hemisphere
 	std::uniform_real_distribution<float> dis(0, 1.0);
 	while(true){
 		Intersection point;
+		point.triangleIndex = subPath[bounces].surfaceIndex; // previous vertex
 
 		// Nothing was hit.
 		if (!ClosestIntersection(r.o, r.d, triangles, point)) {
@@ -599,16 +605,15 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 			break;
 		}
 
-		pdfRev = glm::abs(glm::dot(vertex.normal, r.d)) / (PI);
+		// reverse is simulated as if the ray came 
+		pdfFwd = 1 / (2 * PI);
+		pdfRev = 1 / (2 * PI);
 		prev.pdfRev = pdfRev * invDist2 * glm::abs(glm::dot(prev.normal, glm::normalize(-w))); // idk what pdfRev will be used for but whatever
 
 		// append whatever probability it will be to get the next vertex
 		// actually, no. *= is incorrect. We want the 
 		// probability of specifically choosing this 
 		// new direction, nothing else. Otherwise beta will blow up.
-
-		// reverse is simulated as if the ray came 
-		pdfFwd = glm::abs(glm::dot(vertex.normal, -r1.d)) / (PI);
 
 		// append the contribution to the beta from the current intersection point 
 		// onto the future intersection points
@@ -761,6 +766,7 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 		for(int j = 2; j <= t; ++j){ // eye is not really a surface so im not counting it?
 			//cout << i << " " << j << endl;
 			Intersection otherObj;
+			otherObj.triangleIndex = lightPath[i-1].surfaceIndex; // previous vertex
 			if(!ClosestIntersection(lightPath[i-1].position, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
 				continue;
 			} else {
