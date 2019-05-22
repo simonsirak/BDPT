@@ -56,8 +56,8 @@ vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 
 /* Other BDPT stuff */
 vec3 buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
-int numSamples = 50;
-int maxDepth = 8;
+int numSamples = 500;
+int maxDepth = 6;
 // ----------------------------------------------------------------------------
 // FUNCTIONS
 
@@ -214,7 +214,7 @@ bool ClosestIntersection(
 
 		const Obj* triangle = triangles[i];
 		double t = triangle->intersect(r);
-        if(t > 0 && t < closestIntersection.t){ // 0.001 is small epsilon to prevent self intersection
+        if(t > 0.0001f && t < closestIntersection.t){ // 0.001 is small epsilon to prevent self intersection
             closestIntersection.t = t;
             closestIntersection.triangleIndex = i;
         }
