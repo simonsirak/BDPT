@@ -57,7 +57,7 @@ vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 /* Other BDPT stuff */
 vec3 buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
 int numSamples = 50;
-
+int maxDepth = 8;
 // ----------------------------------------------------------------------------
 // FUNCTIONS
 
@@ -175,11 +175,11 @@ void Draw()
 				vector<Vertex> eyePath;
 
 				// Trace eye path
-				GenerateEyePath(x, y, eyePath, 5);
+				GenerateEyePath(x, y, eyePath, maxDepth);
 
 				// Trace light path
 				// for now, direction of ray = direction from center to point. Should change to random hemisphere direction later.
-				GenerateLightPath(lightPath, 5);
+				GenerateLightPath(lightPath, maxDepth);
 
                 vec3 old = buffer[x][y];
 
