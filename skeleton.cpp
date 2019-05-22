@@ -418,7 +418,7 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 
 		// insert vertex
 		subPath.push_back(vertex);
-        prev = &subPath[bounces-1];
+        prev = &subPath[bounces-1]; // NEED TO DO THIS IN CASE RESIZING OF VECTOR OCCURS
 
 		// don't include anything after a light source
 		if(triangles[point.triangleIndex]->emission > 0){
