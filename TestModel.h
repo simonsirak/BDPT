@@ -71,7 +71,7 @@ class Sphere : public Obj {
 		else disc = sqrt(disc);
 		double sol1 = -b + disc;
 		double sol2 = -b - disc;
-		return (sol2>0.01f) ? sol2/2 : ((sol1>0.01f) ? sol1/2 : 0); // 0.01f is some epsilon to avoid self intersection
+		return (sol2>0) ? sol2/2 : ((sol1>0) ? sol1/2 : 0); // 0.01f is some epsilon to avoid self intersection
 	}
 
 	vec3 normal(const vec3& p0) const {
@@ -257,8 +257,8 @@ void LoadTestModel( std::vector<Obj*>& triangles )
         }
 	}
 
-    // triangles.push_back(new Sphere(0.15, vec3(0,  -0.5, -0.7)));
-    // triangles[triangles.size()-1]->setMat(white, 14, 1);
+    triangles.push_back(new Sphere(0.05, vec3(0,  -0.5, -0.7)));
+    triangles[triangles.size()-1]->setMat(white, 18, 1);
 }
 
 #endif
