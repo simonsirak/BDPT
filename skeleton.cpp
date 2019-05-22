@@ -56,8 +56,8 @@ vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 
 /* Other BDPT stuff */
 vec3 buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
-int numSamples = 500;
-int maxDepth = 6;
+int numSamples = 50;
+int maxDepth = 7;
 // ----------------------------------------------------------------------------
 // FUNCTIONS
 
@@ -186,6 +186,25 @@ void Draw()
 				buffer[x][y] = (old * float(i) + connect(lightPath, eyePath))/float(i+1);
 
                 PutPixelSDL( screen, x, y,  buffer[x][y]);
+
+                // Regular ray tracing
+                // vec3 dir(
+				// 		x-SCREEN_WIDTH/2.0f, 
+				// 		y-SCREEN_HEIGHT/2.0f, 
+				// 		focalLength
+				// 	); 
+
+                // dir = dir;
+                // dir = R * dir; // direction is rotated by camera rotation matrix
+
+                // vec3 color( 0, 0, 0 );
+                // Intersection inter;
+                // inter.triangleIndex = -1;
+                // if(ClosestIntersection(cameraPos, dir, triangles, inter)){
+                //     PutPixelSDL( screen, x, y,  DirectLight(inter) + triangles[inter.triangleIndex]->color * indirectLight);
+                // } else {
+                //     PutPixelSDL( screen, x, y,  color);
+                // }
             }
         }   
 
@@ -214,7 +233,7 @@ bool ClosestIntersection(
 
 		const Obj* triangle = triangles[i];
 		double t = triangle->intersect(r);
-        if(t > 0.0001f && t < closestIntersection.t){ // 0.001 is small epsilon to prevent self intersection
+        if(t > 0 && t < closestIntersection.t){ // 0.0001f is small epsilon to prevent self intersection
             closestIntersection.t = t;
             closestIntersection.triangleIndex = i;
         }
