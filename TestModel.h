@@ -43,7 +43,7 @@ class Triangle : public Obj {
 		mat3 A( -ray.d, e1, e2 );
 		vec3 x = glm::inverse( A ) * b;
 
-		if(x.x > 0.01 && x.y >= 0 && x.z >= 0 && x.y <= 1 && x.z <= 1 && x.y + x.z <= 1){
+		if(x.x > 0 && x.y >= 0 && x.z >= 0 && x.y <= 1 && x.z <= 1 && x.y + x.z <= 1){
             return x.x; // return t
 		} else {
             return 0;
@@ -257,8 +257,8 @@ void LoadTestModel( std::vector<Obj*>& triangles )
         }
 	}
 
-    triangles.push_back(new Sphere(0.15, vec3(0,  -0.5, -0.7)));
-    triangles[triangles.size()-1]->setMat(white, 14, 1);
+    // triangles.push_back(new Sphere(0.15, vec3(0,  -0.5, -0.7)));
+    // triangles[triangles.size()-1]->setMat(white, 14, 1);
 }
 
 #endif

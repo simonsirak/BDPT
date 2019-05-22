@@ -4,6 +4,7 @@
 CMakeFiles/SecondLab.dir/skeleton.cpp.o: SDLauxiliary.h
 CMakeFiles/SecondLab.dir/skeleton.cpp.o: TestModel.h
 CMakeFiles/SecondLab.dir/skeleton.cpp.o: skeleton.cpp
+CMakeFiles/SecondLab.dir/skeleton.cpp.o: utility.h
 CMakeFiles/SecondLab.dir/skeleton.cpp.o: /usr/local/include/SDL/SDL.h
 CMakeFiles/SecondLab.dir/skeleton.cpp.o: /usr/local/include/SDL/SDL_active.h
 CMakeFiles/SecondLab.dir/skeleton.cpp.o: /usr/local/include/SDL/SDL_audio.h
