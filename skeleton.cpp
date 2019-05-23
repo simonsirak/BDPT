@@ -18,8 +18,8 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath);
 // GLOBAL VARIABLES
 
 /* Screen variables */
-const int SCREEN_WIDTH = 400;
-const int SCREEN_HEIGHT = 400;
+const int SCREEN_WIDTH = 200;
+const int SCREEN_HEIGHT = 200;
 SDL_Surface* screen;
 
 /* Time */
@@ -56,7 +56,7 @@ vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 
 /* Other BDPT stuff */
 vec3 buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
-int numSamples = 50;
+int numSamples = 500;
 int maxDepth = 7;
 // ----------------------------------------------------------------------------
 // FUNCTIONS
