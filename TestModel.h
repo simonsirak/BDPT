@@ -43,7 +43,7 @@ class Triangle : public Obj {
 		mat3 A( -ray.d, e1, e2 );
 		vec3 x = glm::inverse( A ) * b;
 
-		if(x.x > 0 && x.y >= 0 && x.z >= 0 && x.y <= 1 && x.z <= 1 && x.y + x.z <= 1){
+		if(x.x >= 0 && x.y >= 0 && x.z >= 0 && x.y <= 1 && x.z <= 1 && x.y + x.z <= 1){
             return x.x; // return t
 		} else {
             return 0;
@@ -67,11 +67,11 @@ class Sphere : public Obj {
 		double b = glm::dot((ray.o-c)*2.f,ray.d);
 		double c_ = glm::dot(ray.o-c, ray.o-c) - (r*r);
 		double disc = b*b - 4*c_;
-		if (disc<0) return 0;
+		if (disc<=0) return 0;
 		else disc = sqrt(disc);
 		double sol1 = -b + disc;
 		double sol2 = -b - disc;
-		return (sol2>0) ? sol2/2 : ((sol1>0) ? sol1/2 : 0); // 0.01f is some epsilon to avoid self intersection
+		return (sol2>=0) ? sol2/2 : ((sol1>=0) ? sol1/2 : 0); // 0.01f is some epsilon to avoid self intersection
 	}
 
 	vec3 normal(const vec3& p0) const {
@@ -83,7 +83,7 @@ class Sphere : public Obj {
 // -1 <= x <= +1
 // -1 <= y <= +1
 // -1 <= z <= +1
-void LoadTestModel( std::vector<Obj*>& triangles )
+void LoadTestModel( std::vector<Obj*>& triangles, std::vector<Obj*>& lights )
 {
 	using glm::vec3;
 
@@ -259,6 +259,11 @@ void LoadTestModel( std::vector<Obj*>& triangles )
 
     triangles.push_back(new Sphere(0.05, vec3(0,  -0.5, -0.7)));
     triangles[triangles.size()-1]->setMat(white, 60, 1);
+    lights.push_back(triangles[triangles.size()-1]);
+
+    // triangles.push_back(new Sphere(0.05, vec3(0.7,  -0.7, -0.5)));
+    // triangles[triangles.size()-1]->setMat(white, 60, 1);
+    // lights.push_back(triangles[triangles.size()-1]);
 }
 
 #endif

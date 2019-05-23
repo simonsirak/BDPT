@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include <SDL.h>
 #include <cmath>
+#include <random>
 #include "SDLauxiliary.h"
 #include "TestModel.h"
 #include "utility.h"
@@ -48,6 +49,7 @@ mat3 P; // Pitch rotation matrix (around x axis)
 
 /* Model */
 vector<Obj*> triangles;
+vector<Obj*> lights;
 
 /* Light source */
 vec3 lightPos( 0, -0.5, -0.7 );
@@ -57,7 +59,7 @@ vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 /* Other BDPT stuff */
 vec3 buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
 int numSamples = 500;
-int maxDepth = 7;
+int maxDepth = 10;
 // ----------------------------------------------------------------------------
 // FUNCTIONS
 
@@ -74,8 +76,9 @@ vec3 DirectLight( const Intersection& i );
 
 int main( int argc, char* argv[] )
 {
+    srand(NULL);
 	// load model
-	LoadTestModel(triangles);
+	LoadTestModel(triangles, lights);
 
 	screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT );
 	t = SDL_GetTicks();	// Set start value for timer.
@@ -329,38 +332,36 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
 	if(maxDepth == 0)
 		return 0;
 
-	Sphere * light = dynamic_cast<Sphere*>(triangles[triangles.size()-1]);
+    int index = rand() % lights.size();
+    int triangleIndex = -1;
 
-	std::uniform_real_distribution<float> dis(0, 1.0);
+	Sphere * light = dynamic_cast<Sphere*>(lights[index]);   
 
-	float theta0 = 2*PI*dis(rd);
-	float theta1 = acos(1 - 2*dis(rd));
+    for(int i = 0; i < triangles.size(); ++i){
+        if(light == triangles[i]){
+            triangleIndex = i;
+            break;
+        }
+    } 
 
-	// direction from center of sphere to go from
-	vec3 offset = glm::normalize(vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)));
+	vec3 offset = uniformSphereSample(light->r);
+    vec3 dir = uniformHemisphereSample(offset, 1);
 
-	theta0 = 2*PI*dis(rd);
-	theta1 = acos(1 - 2*dis(rd));
-
-	// direction of ray from point 
-	vec3 dir = glm::normalize(vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)));
-	dir = glm::normalize(glm::dot(dir, offset) * offset / glm::dot(offset, offset));
-
-	float lightChoiceProb = 1; // only one light atm
-	float lightPosProb = float(1/(light->r*light->r*4*PI)); // 1 / Area
-	float lightDirProb = float(1)/((2 * PI)); // hemisphere uniform, not cosine weighted
+	float lightChoiceProb = 1 / float(lights.size());
+	float lightPosProb = uniformSphereSamplePDF(light->r); // 1 / Area
+	float lightDirProb = uniformHemisphereSamplePDF(1); // hemisphere uniform, not cosine weighted
 	float pointProb = lightChoiceProb * lightPosProb * lightDirProb;
 
 	vec3 Le = vec3(light->emission, light->emission, light->emission);
-	lightPath.push_back({lightChoiceProb * lightPosProb, 0, Le, int(triangles.size()-1), offset, light->c + float(light->r)*offset, dir}); 
+	lightPath.push_back({lightChoiceProb * lightPosProb, 0, Le, triangleIndex, offset, light->c + offset, dir}); 
 
 	// the result is built up from this, which describes the "light" 
 	// that is carried over to the "next" ray in the path.
-	vec3 beta = Le * glm::dot(offset, dir) / pointProb;
+	vec3 beta = Le * glm::dot(glm::normalize(offset), dir) / pointProb;
 
 	//// note, not cosine weighted, we just calculate the cosine term of the LTE.
 	// vec3 Le = vec3(light->emission, light->emission, light->emission) * glm::dot(offset, dir) / pointProb;
-	return TracePath(Ray(light->c + float(light->r)*offset, dir), lightPath, maxDepth - 1, false, beta) + 1;
+	return TracePath(Ray(light->c + offset, dir), lightPath, maxDepth - 1, false, beta) + 1;
 }
 
 /*
@@ -384,9 +385,7 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 
 	int bounces = 0;
 
-	float pdfFwd = 1 / (2 * PI), pdfRev = 0;
-	// RNG vector in hemisphere
-	std::uniform_real_distribution<float> dis(0, 1.0);
+	float pdfFwd = uniformHemisphereSamplePDF(1), pdfRev = 0;
 	while(true){
 		Intersection point;
 		point.triangleIndex = subPath[bounces].surfaceIndex; // previous vertex
@@ -406,19 +405,14 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 
 		/* Process intersection data */
 		Ray r1;
-		r1.o = point.position;
 
-		float theta0 = 2*PI*dis(rd);
-		float theta1 = acos(1 - 2*dis(rd));
+        r1.o = point.position;
 
-		r1.d = vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)); // http://corysimon.github.io/articles/uniformdistn-on-sphere/ THIS WAS A BIG ISSUE, WE FOLLOWED THE STACK OVERFLOW PIECES OF SHIEET. This fixed the "cross light on the ceiling"
-		vec3 intersectionToOrigin = glm::normalize(r.o - r1.o);
+        vec3 intersectionToOrigin = glm::normalize(r.o - r1.o);
+        vec3 gnormal = glm::normalize(triangles[point.triangleIndex]->normal(r1.o));
+		vec3 snormal = glm::normalize(projectAOntoB(intersectionToOrigin, gnormal)); // HAS to be normalized after projection onto another vector.
 
-		r1.d = glm::normalize(r1.d);
-		// enforce direction to be in correct hemisphere, aka project normal onto random vector and normalize
-		vec3 gnormal = glm::normalize(triangles[point.triangleIndex]->normal(r1.o));
-		vec3 snormal = glm::normalize(glm::dot(intersectionToOrigin, gnormal) * gnormal / glm::dot(gnormal, gnormal)); // HAS to be normalized after projection onto another vector.
-		r1.d = glm::normalize(glm::dot(r1.d, snormal) * r1.d / glm::dot(r1.d, r1.d));
+        r1.d = uniformHemisphereSample(snormal, 1);
 
 		/* Construct vertex */
 
@@ -445,13 +439,16 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 		}
 
 		// reverse is simulated as if the ray came 
-		pdfFwd = 1 / (2 * PI);
-		pdfRev = 1 / (2 * PI);
-		prev->pdfRev = pdfRev * invDist2 * glm::abs(glm::dot(prev->normal, glm::normalize(-w))); // idk what pdfRev will be used for but whatever
+		pdfFwd = uniformHemisphereSamplePDF(1);
+		pdfRev = uniformHemisphereSamplePDF(1);
+		prev->pdfRev = pdfRev * invDist2 * glm::abs(glm::dot(prev->normal, glm::normalize(-w)));
 
 		// append the contribution to the beta from the current intersection point 
 		// onto the future intersection points
-		vec3 brdf = triangles[vertex.surfaceIndex]->color / float(PI); 
+
+        // DOUBLE CHECK THAT CORRECT WO AND WI ARE USED
+        // (TRY DRAWING A PICTURE)
+		vec3 brdf = BRDF(vertex, r1.d, r.d, triangles, isRadiance); 
 		vec3 wi = -glm::normalize(w);
 		// one of the many nested surface integral samples
 		beta *= (brdf * glm::abs(glm::dot(r1.d, snormal) / pdfFwd)); // THIS was the reason i got white lines, it's because i used the wrong direction (the outgoing as opposed to the incoming from the next point)
@@ -505,7 +502,7 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 			if(!ClosestIntersection(lightPath[i-1].position, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
 				continue;
 			} else {
-				if(otherObj.triangleIndex != eyePath[j-1].surfaceIndex){
+				if(otherObj.triangleIndex != eyePath[j-1].surfaceIndex && otherObj.t > 0.01f){
 					continue;
 				} else {
 					// // Assume lambertian surface

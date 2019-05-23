@@ -36,7 +36,26 @@ vec3 projectAOntoB(const vec3 & a, const vec3 & b){
     return c;
 }
 
-vec3 uniformHemisphereSample(const vec3 & axis){
+vec3 uniformSphereSample(float r){
+
+    std::uniform_real_distribution<float> dis(0, 1.0);
+
+	float theta0 = 2*PI*dis(rd);
+	float theta1 = acos(1 - 2*dis(rd));
+
+	vec3 dir = 
+        vec3(sin(theta1)*sin(theta0), sin(theta1)*cos(theta0), cos(theta1)); 
+    
+    dir = r * glm::normalize(dir);
+    
+    return dir;
+}
+
+float uniformSphereSamplePDF(float r){
+    return 1/(r*r*4*PI);
+}
+
+vec3 uniformHemisphereSample(const vec3 & axis, float r){
 
     std::uniform_real_distribution<float> dis(0, 1.0);
 
@@ -51,8 +70,8 @@ vec3 uniformHemisphereSample(const vec3 & axis){
     return dir;
 }
 
-float uniformHemisphereSamplingPDF(){
-    return 1 / 2*PI;
+float uniformHemisphereSamplePDF(float r){
+    return 1 / (r*r*2*PI);
 }
 
 float uniformAreaLightSample(const Obj * light){
@@ -60,7 +79,7 @@ float uniformAreaLightSample(const Obj * light){
     return 0;
 }
 
-float uniformAreaLightSamplingPDF(const Obj * light){
+float uniformAreaLightSamplePDF(const Obj * light){
     // TODO
     return 0;
 }
@@ -74,6 +93,28 @@ vec3 uniformFilmSample(const vec3 & dir){
 float uniformFilmSamplingPDF(){
     // TODO
     return 1;
+}
+
+vec3 BRDF(Vertex &vert, vec3 wo, vec3 wi, vector<Obj*> &shapes, bool isRadiance){
+    if(isRadiance){ // if radiance transport, i.e path starting from eye
+        // do nothing
+    } else { // Importance transport
+        // Path is generated backwards, wo flip incident and outgoing
+        // for correct BRDF
+        vec3 tmp = wo;
+        wo = wi;
+        wi = tmp;
+    }
+
+    Obj* shape = shapes[vert.surfaceIndex];
+
+    if(shape->type == 1){ // lambertian
+        return shape->color / float(PI);
+    } else if(shape->type == 2){ // phong
+        // calculate reflected direction using Snell's Law
+        // calculate Fresnel Reflectance
+        // calculate BRDF according to PBR-BOOK
+    }
 }
 
 float G(vec3 na, vec3 nb, vec3 ab){
