@@ -261,8 +261,8 @@ void LoadTestModel( std::vector<Obj*>& triangles, std::vector<Obj*>& lights )
     // triangles[triangles.size()-1]->setMat(white, 60, 1);
     // lights.push_back(triangles[triangles.size()-1]);
 
-    triangles.push_back(new Sphere(0.15, vec3(0,  -0.7, -0.5)));
-    triangles[triangles.size()-1]->setMat(white, 60, 1);
+    triangles.push_back(new Sphere(0.05, vec3(0,  -0.7, -0.5)));
+    triangles[triangles.size()-1]->setMat(white, 14, 1);
     lights.push_back(triangles[triangles.size()-1]);
 
     // triangles.push_back(new Sphere(0.05, vec3(0.7,  -0.7, -0.5)));

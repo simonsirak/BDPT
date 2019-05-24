@@ -19,8 +19,8 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath);
 // GLOBAL VARIABLES
 
 /* Screen variables */
-const int SCREEN_WIDTH = 400;
-const int SCREEN_HEIGHT = 400;
+const int SCREEN_WIDTH = 200;
+const int SCREEN_HEIGHT = 200;
 SDL_Surface* screen;
 
 /* Time */
@@ -59,7 +59,7 @@ vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 /* Other BDPT stuff */
 vec3 buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
 int samplesDone[SCREEN_WIDTH][SCREEN_HEIGHT];
-int numSamples = 200;
+int numSamples = 50;
 int maxDepth = 10;
 int curX, curY;
 
@@ -177,11 +177,11 @@ void Draw()
                 if(!NoQuitMessageSDL())
                     return;
 
-                if(samplesDone[x][y] >= numSamples)
-                    continue;
+                // if(samplesDone[x][y] >= numSamples)
+                //     continue;
 
-                curX = x;
-                curY = y;
+                // curX = x;
+                // curY = y;
 
 				vector<Vertex> lightPath;
 				vector<Vertex> eyePath;
@@ -195,9 +195,13 @@ void Draw()
 
                 vec3 old = buffer[x][y];
 
-                // sequential form of division by n.
-				//buffer[x][y] = (old * float(i) + connect(lightPath, eyePath))/float(i+1);
-                buffer[x][y] += connect(lightPath, eyePath);
+				// The result is divided by numSamples, aka 
+				// sum of the filter function at all evaluated points on the pixel 
+				// film, which were all from 1 point on the pixel, which had an importance of 1 
+
+                // This is the sequential form of division by numSamples.
+				buffer[x][y] = (old * float(i) + connect(lightPath, eyePath))/float(i+1);
+                //buffer[x][y] += connect(lightPath, eyePath);
 
                 PutPixelSDL( screen, x, y,  buffer[x][y]);
 
@@ -487,20 +491,14 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 	// // // s == 0
 	vec3 L;
 	for(int i = 2; i <= t; ++i){
-        if(samplesDone[curX][curY] < numSamples){
-            Vertex &last = eyePath[i-1];
-            if(triangles[last.surfaceIndex]->emission > 0){
-                // get light emitted from last light to second last element of eyePAth
-                vec3 lightToPoint = glm::normalize(eyePath[i-2].position - last.position); // maybe i should cosine weight the emittance using this?
-                vec3 Le = vec3(triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission);
-                L = Le * last.c; // MAYBE LOOK HERE, DON'T USE LAST?
-                color += L * MIS(lightPath, eyePath, 0, i)
-                            / float(numSamples); 
-                            // divide by numSamples aka the sum of the filter function at all evaluated points on the pixel film, which were all from 1 point on the pixel, which had an importance of 1
-
-                samplesDone[curX][curY]++; // increment it, since we did another sample
-            }
-        }
+        Vertex &last = eyePath[i-1];
+		if(triangles[last.surfaceIndex]->emission > 0){
+			// get light emitted from last light to second last element of eyePAth
+			vec3 lightToPoint = glm::normalize(eyePath[i-2].position - last.position); // maybe i should cosine weight the emittance using this?
+			vec3 Le = vec3(triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission);
+			L = Le * last.c; // MAYBE LOOK HERE, DON'T USE LAST?
+			color += L * MIS(lightPath, eyePath, 0, i);
+		}
 		
 	}
 
@@ -515,41 +513,54 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 			// 	continue;
 
 			//cout << i << " " << j << endl;
-            if(samplesDone[curX][curY] < numSamples){
-                Intersection otherObj;
-                otherObj.triangleIndex = lightPath[i-1].surfaceIndex; // previous vertex
-                if(!ClosestIntersection(lightPath[i-1].position, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
-                    continue;
-                } else {
-                    if(otherObj.triangleIndex != eyePath[j-1].surfaceIndex && otherObj.t > 0.01f){
-                        continue;
-                    } else {
-                        // // Assume lambertian surface
-                        // if(eyePath[j-1].c.x < -10000 || eyePath[j-1].c.x > 10000 || eyePath[j-1].c.y < -10000 || eyePath[j-1].c.y > 10000 || eyePath[j-1].c.z < -10000 || eyePath[j-1].c.z > 10000){
-                        // 	cout << eyePath[j-1].c.x << " " << eyePath[j-1].c.y << " " << eyePath[j-1].c.z << endl;
-                        // 	continue;
-                        // }
-                        // if(lightPath[i-1].c.x < -10000 || lightPath[i-1].c.x > 10000 || lightPath[i-1].c.y < -10000 || lightPath[i-1].c.y > 10000 || lightPath[i-1].c.z < -10000 || lightPath[i-1].c.z > 10000){
-                        // 	cout << lightPath[i-1].c.x << " " << lightPath[i-1].c.y << " " << lightPath[i-1].c.z << endl;
-                        // 	continue;
-                        // }
-                        color += lightPath[i-1].c * eyePath[j-1].c * triangles[lightPath[i-1].surfaceIndex]->color / float(PI)
-                            *  G(lightPath[i-1].normal, eyePath[j-1].normal, eyePath[j-1].position - lightPath[i-1].position)
-                            *  triangles[eyePath[j-1].surfaceIndex]->color / float(PI)
-                            *  MIS(lightPath, eyePath, i, j) 
-                            / float(numSamples); 
-                            // divide by numSamples aka the sum of the filter function at all evaluated points on the pixel film, which were all from 1 point on the pixel, which had an importance of 1
-                        
-                        samplesDone[curX][curY]++; // increment since we did another sample
-
-                        /* This samamamich line is supposed to have that last commented out factor */ 
-                        //color += /*triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position);*/ triangles[eyePath[j].surfaceIndex]->color / float(PI);
-                    }
-                } 
-            }
+            Intersection otherObj;
+			otherObj.triangleIndex = lightPath[i-1].surfaceIndex; // previous vertex
+			if(!ClosestIntersection(lightPath[i-1].position, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
+				continue;
+			} else {
+				if(otherObj.triangleIndex != eyePath[j-1].surfaceIndex && otherObj.t > 0.01f){
+					continue;
+				} else {
+					// // Assume lambertian surface
+					// if(eyePath[j-1].c.x < -10000 || eyePath[j-1].c.x > 10000 || eyePath[j-1].c.y < -10000 || eyePath[j-1].c.y > 10000 || eyePath[j-1].c.z < -10000 || eyePath[j-1].c.z > 10000){
+					// 	cout << eyePath[j-1].c.x << " " << eyePath[j-1].c.y << " " << eyePath[j-1].c.z << endl;
+					// 	continue;
+					// }
+					// if(lightPath[i-1].c.x < -10000 || lightPath[i-1].c.x > 10000 || lightPath[i-1].c.y < -10000 || lightPath[i-1].c.y > 10000 || lightPath[i-1].c.z < -10000 || lightPath[i-1].c.z > 10000){
+					// 	cout << lightPath[i-1].c.x << " " << lightPath[i-1].c.y << " " << lightPath[i-1].c.z << endl;
+					// 	continue;
+					// }
+					color += lightPath[i-1].c * eyePath[j-1].c * triangles[lightPath[i-1].surfaceIndex]->color / float(PI)
+						*  G(lightPath[i-1].normal, eyePath[j-1].normal, eyePath[j-1].position - lightPath[i-1].position)
+						*  triangles[eyePath[j-1].surfaceIndex]->color / float(PI)
+						*  MIS(lightPath, eyePath, i, j);
+					
+					/* This samamamich line is supposed to have that last commented out factor */ 
+					//color += /*triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position);*/ triangles[eyePath[j].surfaceIndex]->color / float(PI);
+				}
+			} 
 			
 		}
 	}
 
-	return color; // divided by probability of getting this measurement, since we are using monte carlo ???
+	// color is now the result of the multi-sample estimation, aka 
+	// is a multi-sample estimator. This is because we have taken 
+	// a sample of a number of strategies p(s,t), weighted by their 
+	// probability of occuring.
+	//
+	// I should now remove the samplesDone buffer since it is unnecessary.
+
+	return color; 
 }
+
+/*
+TODO: GÖR OM CONNECT SÅ ATT DEN GÖR;
+- FOR EACH CONNECTION OF TWO SUBPATHS
+	- RUN ALL THE CASES 0, 1, WHATEVER
+	- COUNT THAT AS ONE SAMPLE AND DIVIDE BY NUMSAMPLES
+
+Right now, I am only calculating one strategy for each sample, i.e the 
+strategy you get from letting the subpaths be exactly what they actually are.
+
+When I fix this, I am 100 % done with the code.
+*/
