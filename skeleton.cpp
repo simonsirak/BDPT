@@ -19,8 +19,8 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath);
 // GLOBAL VARIABLES
 
 /* Screen variables */
-const int SCREEN_WIDTH = 200;
-const int SCREEN_HEIGHT = 200;
+const int SCREEN_WIDTH = 400;
+const int SCREEN_HEIGHT = 400;
 SDL_Surface* screen;
 
 /* Time */
@@ -59,7 +59,7 @@ vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 /* Other BDPT stuff */
 vec3 buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
 int samplesDone[SCREEN_WIDTH][SCREEN_HEIGHT];
-int numSamples = 75;
+int numSamples = 200;
 int maxDepth = 10;
 int curX, curY;
 
@@ -360,7 +360,7 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
 
 	float lightChoiceProb = 1 / float(lights.size());
 	float lightPosProb = uniformSphereSamplePDF(light->r); // 1 / Area
-	float lightDirProb = cosWeightedUniformHemisphereSamplePDF(dir, offset); // hemisphere uniform, not cosine weighted
+	float lightDirProb = uniformHemisphereSamplePDF(1); //cosWeightedUniformHemisphereSamplePDF(dir, offset); // hemisphere uniform, not cosine weighted
 	float pointProb = lightChoiceProb * lightPosProb * lightDirProb;
 
 	vec3 Le = vec3(light->emission, light->emission, light->emission);
@@ -396,7 +396,7 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 
 	int bounces = 0;
 
-	float pdfFwd = uniformHemisphereSamplePDF(1), pdfRev = 0;
+	float pdfFwd = isRadiance ? uniformHemisphereSamplePDF(1) : uniformHemisphereSamplePDF(1) /*cosWeightedUniformHemisphereSamplePDF(subPath[0].dir, subPath[0].normal)*/, pdfRev = 0;
 	while(true){
 		Intersection point;
 		point.triangleIndex = subPath[bounces].surfaceIndex; // previous vertex
