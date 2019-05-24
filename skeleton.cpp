@@ -58,8 +58,11 @@ vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 
 /* Other BDPT stuff */
 vec3 buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
-int numSamples = 500;
+int samplesDone[SCREEN_WIDTH][SCREEN_HEIGHT];
+int numSamples = 75;
 int maxDepth = 10;
+int curX, curY;
+
 // ----------------------------------------------------------------------------
 // FUNCTIONS
 
@@ -174,6 +177,12 @@ void Draw()
                 if(!NoQuitMessageSDL())
                     return;
 
+                if(samplesDone[x][y] >= numSamples)
+                    continue;
+
+                curX = x;
+                curY = y;
+
 				vector<Vertex> lightPath;
 				vector<Vertex> eyePath;
 
@@ -186,7 +195,9 @@ void Draw()
 
                 vec3 old = buffer[x][y];
 
-				buffer[x][y] = (old * float(i) + connect(lightPath, eyePath))/float(i+1);
+                // sequential form of division by n.
+				//buffer[x][y] = (old * float(i) + connect(lightPath, eyePath))/float(i+1);
+                buffer[x][y] += connect(lightPath, eyePath);
 
                 PutPixelSDL( screen, x, y,  buffer[x][y]);
 
@@ -345,11 +356,11 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
     } 
 
 	vec3 offset = uniformSphereSample(light->r);
-    vec3 dir = uniformHemisphereSample(offset, 1);
+    vec3 dir = cosWeightedUniformHemisphereSample(offset);
 
 	float lightChoiceProb = 1 / float(lights.size());
 	float lightPosProb = uniformSphereSamplePDF(light->r); // 1 / Area
-	float lightDirProb = uniformHemisphereSamplePDF(1); // hemisphere uniform, not cosine weighted
+	float lightDirProb = cosWeightedUniformHemisphereSamplePDF(dir, offset); // hemisphere uniform, not cosine weighted
 	float pointProb = lightChoiceProb * lightPosProb * lightDirProb;
 
 	vec3 Le = vec3(light->emission, light->emission, light->emission);
@@ -476,14 +487,21 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 	// // // s == 0
 	vec3 L;
 	for(int i = 2; i <= t; ++i){
-		Vertex &last = eyePath[i-1];
-		if(triangles[last.surfaceIndex]->emission > 0){
-			// get light emitted from last light to second last element of eyePAth
-			vec3 lightToPoint = glm::normalize(eyePath[i-2].position - last.position); // maybe i should cosine weight the emittance using this?
-			vec3 Le = vec3(triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission);
-			L = Le * last.c; // MAYBE LOOK HERE, DON'T USE LAST?
-			color += L * MIS(lightPath, eyePath, 0, i);
-		}
+        if(samplesDone[curX][curY] < numSamples){
+            Vertex &last = eyePath[i-1];
+            if(triangles[last.surfaceIndex]->emission > 0){
+                // get light emitted from last light to second last element of eyePAth
+                vec3 lightToPoint = glm::normalize(eyePath[i-2].position - last.position); // maybe i should cosine weight the emittance using this?
+                vec3 Le = vec3(triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission, triangles[last.surfaceIndex]->emission);
+                L = Le * last.c; // MAYBE LOOK HERE, DON'T USE LAST?
+                color += L * MIS(lightPath, eyePath, 0, i)
+                            / float(numSamples); 
+                            // divide by numSamples aka the sum of the filter function at all evaluated points on the pixel film, which were all from 1 point on the pixel, which had an importance of 1
+
+                samplesDone[curX][curY]++; // increment it, since we did another sample
+            }
+        }
+		
 	}
 
 	// t == 1: Skipped (pretty sure its pointless since we only have 1 direction and 1 point on the pixel to go from)
@@ -497,31 +515,39 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 			// 	continue;
 
 			//cout << i << " " << j << endl;
-			Intersection otherObj;
-			otherObj.triangleIndex = lightPath[i-1].surfaceIndex; // previous vertex
-			if(!ClosestIntersection(lightPath[i-1].position, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
-				continue;
-			} else {
-				if(otherObj.triangleIndex != eyePath[j-1].surfaceIndex && otherObj.t > 0.01f){
-					continue;
-				} else {
-					// // Assume lambertian surface
-					// if(eyePath[j-1].c.x < -10000 || eyePath[j-1].c.x > 10000 || eyePath[j-1].c.y < -10000 || eyePath[j-1].c.y > 10000 || eyePath[j-1].c.z < -10000 || eyePath[j-1].c.z > 10000){
-					// 	cout << eyePath[j-1].c.x << " " << eyePath[j-1].c.y << " " << eyePath[j-1].c.z << endl;
-					// 	continue;
-					// }
-					// if(lightPath[i-1].c.x < -10000 || lightPath[i-1].c.x > 10000 || lightPath[i-1].c.y < -10000 || lightPath[i-1].c.y > 10000 || lightPath[i-1].c.z < -10000 || lightPath[i-1].c.z > 10000){
-					// 	cout << lightPath[i-1].c.x << " " << lightPath[i-1].c.y << " " << lightPath[i-1].c.z << endl;
-					// 	continue;
-					// }
-					color += lightPath[i-1].c * eyePath[j-1].c * triangles[lightPath[i-1].surfaceIndex]->color / float(PI)
-						  *  G(lightPath[i-1].normal, eyePath[j-1].normal, eyePath[j-1].position - lightPath[i-1].position)
-						  *  triangles[eyePath[j-1].surfaceIndex]->color / float(PI)
-						  *  MIS(lightPath, eyePath, i, j);
-					/* This samamamich line is supposed to have that last commented out factor */ 
-					//color += /*triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position);*/ triangles[eyePath[j].surfaceIndex]->color / float(PI);
-				}
-			}
+            if(samplesDone[curX][curY] < numSamples){
+                Intersection otherObj;
+                otherObj.triangleIndex = lightPath[i-1].surfaceIndex; // previous vertex
+                if(!ClosestIntersection(lightPath[i-1].position, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
+                    continue;
+                } else {
+                    if(otherObj.triangleIndex != eyePath[j-1].surfaceIndex && otherObj.t > 0.01f){
+                        continue;
+                    } else {
+                        // // Assume lambertian surface
+                        // if(eyePath[j-1].c.x < -10000 || eyePath[j-1].c.x > 10000 || eyePath[j-1].c.y < -10000 || eyePath[j-1].c.y > 10000 || eyePath[j-1].c.z < -10000 || eyePath[j-1].c.z > 10000){
+                        // 	cout << eyePath[j-1].c.x << " " << eyePath[j-1].c.y << " " << eyePath[j-1].c.z << endl;
+                        // 	continue;
+                        // }
+                        // if(lightPath[i-1].c.x < -10000 || lightPath[i-1].c.x > 10000 || lightPath[i-1].c.y < -10000 || lightPath[i-1].c.y > 10000 || lightPath[i-1].c.z < -10000 || lightPath[i-1].c.z > 10000){
+                        // 	cout << lightPath[i-1].c.x << " " << lightPath[i-1].c.y << " " << lightPath[i-1].c.z << endl;
+                        // 	continue;
+                        // }
+                        color += lightPath[i-1].c * eyePath[j-1].c * triangles[lightPath[i-1].surfaceIndex]->color / float(PI)
+                            *  G(lightPath[i-1].normal, eyePath[j-1].normal, eyePath[j-1].position - lightPath[i-1].position)
+                            *  triangles[eyePath[j-1].surfaceIndex]->color / float(PI)
+                            *  MIS(lightPath, eyePath, i, j) 
+                            / float(numSamples); 
+                            // divide by numSamples aka the sum of the filter function at all evaluated points on the pixel film, which were all from 1 point on the pixel, which had an importance of 1
+                        
+                        samplesDone[curX][curY]++; // increment since we did another sample
+
+                        /* This samamamich line is supposed to have that last commented out factor */ 
+                        //color += /*triangles[lightPath[i].surfaceIndex]->color / float(PI) * G(lightPath[i].normal, eyePath[j].normal, eyePath[j].position - lightPath[i].position);*/ triangles[eyePath[j].surfaceIndex]->color / float(PI);
+                    }
+                } 
+            }
+			
 		}
 	}
 

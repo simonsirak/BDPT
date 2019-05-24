@@ -74,6 +74,37 @@ float uniformHemisphereSamplePDF(float r){
     return 1 / (r*r*2*PI);
 }
 
+// frame calculation taken from:
+// https://github.com/embree/embree-renderer/blob/master/common/math/linearspace3.h
+mat3 frame(const vec3 &N){
+    vec3 dx0 = glm::cross(vec3(1,0,0),N);
+    vec3 dx1 = glm::cross(vec3(0,1,0),N);
+    vec3 dx = glm::normalize(glm::dot(dx0,dx0) > glm::dot(dx1,dx1) ? dx0 : dx1);
+    vec3 dy = glm::normalize(glm::cross(N,dx));
+    return mat3(dx,dy,N);
+}
+
+// cosine weighted taken from: 
+// https://github.com/embree/embree-renderer/blob/master/devices/device_singleray/samplers/shapesampler.h
+// only works for directions as of now because of normalization, not e.g point samples
+vec3 cosWeightedUniformHemisphereSample(const vec3 & axis){
+
+    std::uniform_real_distribution<float> dis(0, 1.0);
+
+    const float phi = float(2*PI) * dis(rd);
+    const float vv = 2.0f*(dis(rd) - 0.5f);
+    const float cosTheta = (vv < 0 ? -1 : 1)*sqrt(abs(vv)), sinTheta = sqrt(glm::max(0.f, 1 - cosTheta*cosTheta));
+    return glm::normalize(frame(axis) * vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta)); //Sample3f(Vector3f(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta), 2.0f*cosTheta*float(one_over_pi));
+}
+
+
+// only works for directions as of now, because I deliberately normalize
+// PDF corresponds to cosine weighted that was taken from:
+// https://github.com/embree/embree-renderer/blob/master/devices/device_singleray/samplers/shapesampler.h
+float cosWeightedUniformHemisphereSamplePDF(const vec3 &sampled, const vec3 &axis){
+    return 2.0f*abs(glm::dot(glm::normalize(sampled),glm::normalize(axis)))*float(1/PI);
+}
+
 float uniformAreaLightSample(const Obj * light){
     // TODO: 1 / Area
     return 0;
@@ -140,7 +171,7 @@ float MIS(
 
 	// Consider hypothetical connection strategies along the camera subpath
     float ri = 1;
-    for (int i = t - 1; i > 0; --i) {
+    for (int i = t - 1; i > 1; --i) {
         ri *=
             remap0(eyeVertices[i].pdfRev) / remap0(eyeVertices[i].pdfFwd);
         sumRi += ri;
