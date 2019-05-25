@@ -87,21 +87,21 @@ mat3 frame(const vec3 &N){
 // cosine weighted taken from: 
 // https://github.com/embree/embree-renderer/blob/master/devices/device_singleray/samplers/shapesampler.h
 // only works for directions as of now because of normalization, not e.g point samples
-vec3 cosWeightedUniformHemisphereSample(const vec3 & axis){
+vec3 cosWeightedHemisphereSample(const vec3 & axis){
 
     std::uniform_real_distribution<float> dis(0, 1.0);
 
     const float phi = float(2*PI) * dis(rd);
     const float vv = 2.0f*(dis(rd) - 0.5f);
     const float cosTheta = (vv < 0 ? -1 : 1)*sqrt(abs(vv)), sinTheta = sqrt(glm::max(0.f, 1 - cosTheta*cosTheta));
-    return glm::normalize(frame(axis) * vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta)); //Sample3f(Vector3f(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta), 2.0f*cosTheta*float(one_over_pi));
+    return glm::normalize(frame(glm::normalize(axis)) * vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta)); //Sample3f(Vector3f(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta), 2.0f*cosTheta*float(one_over_pi));
 }
 
 
 // only works for directions as of now, because I deliberately normalize
 // PDF corresponds to cosine weighted that was taken from:
 // https://github.com/embree/embree-renderer/blob/master/devices/device_singleray/samplers/shapesampler.h
-float cosWeightedUniformHemisphereSamplePDF(const vec3 &sampled, const vec3 &axis){
+float cosWeightedHemisphereSamplePDF(const vec3 &sampled, const vec3 &axis){
     return 2.0f*abs(glm::dot(glm::normalize(sampled),glm::normalize(axis)))*float(1/PI);
 }
 

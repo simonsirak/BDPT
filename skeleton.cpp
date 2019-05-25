@@ -19,8 +19,8 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath);
 // GLOBAL VARIABLES
 
 /* Screen variables */
-const int SCREEN_WIDTH = 200;
-const int SCREEN_HEIGHT = 200;
+const int SCREEN_WIDTH = 400;
+const int SCREEN_HEIGHT = 400;
 SDL_Surface* screen;
 
 /* Time */
@@ -59,7 +59,7 @@ vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 /* Other BDPT stuff */
 vec3 buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
 int samplesDone[SCREEN_WIDTH][SCREEN_HEIGHT];
-int numSamples = 50;
+int numSamples = 75;
 int maxDepth = 10;
 int curX, curY;
 
@@ -360,11 +360,11 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
     } 
 
 	vec3 offset = uniformSphereSample(light->r);
-    vec3 dir = cosWeightedUniformHemisphereSample(offset);
+    vec3 dir = cosWeightedHemisphereSample(offset);
 
 	float lightChoiceProb = 1 / float(lights.size());
 	float lightPosProb = uniformSphereSamplePDF(light->r); // 1 / Area
-	float lightDirProb = uniformHemisphereSamplePDF(1); //cosWeightedUniformHemisphereSamplePDF(dir, offset); // hemisphere uniform, not cosine weighted
+	float lightDirProb = /*uniformHemisphereSamplePDF(1); //*/cosWeightedHemisphereSamplePDF(dir, offset); // hemisphere uniform, not cosine weighted
 	float pointProb = lightChoiceProb * lightPosProb * lightDirProb;
 
 	vec3 Le = vec3(light->emission, light->emission, light->emission);
@@ -400,7 +400,8 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 
 	int bounces = 0;
 
-	float pdfFwd = isRadiance ? uniformHemisphereSamplePDF(1) : uniformHemisphereSamplePDF(1) /*cosWeightedUniformHemisphereSamplePDF(subPath[0].dir, subPath[0].normal)*/, pdfRev = 0;
+	float pdfFwd = isRadiance ? uniformHemisphereSamplePDF(1) : cosWeightedHemisphereSamplePDF(subPath[0].dir, subPath[0].normal) /*cosWeightedUniformHemisphereSamplePDF(subPath[0].dir, subPath[0].normal)*/, pdfRev = 0;
+    // TODO COSINE WEIGHT THE ENTIRE LIGHT PATH
 	while(true){
 		Intersection point;
 		point.triangleIndex = subPath[bounces].surfaceIndex; // previous vertex
@@ -427,7 +428,7 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
         vec3 gnormal = glm::normalize(triangles[point.triangleIndex]->normal(r1.o));
 		vec3 snormal = glm::normalize(projectAOntoB(intersectionToOrigin, gnormal)); // HAS to be normalized after projection onto another vector.
 
-        r1.d = uniformHemisphereSample(snormal, 1);
+        r1.d = isRadiance ? uniformHemisphereSample(snormal, 1) : cosWeightedHemisphereSample(snormal);
 
 		/* Construct vertex */
 
@@ -454,8 +455,8 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 		}
 
 		// reverse is simulated as if the ray came 
-		pdfFwd = uniformHemisphereSamplePDF(1);
-		pdfRev = uniformHemisphereSamplePDF(1);
+		pdfFwd = isRadiance ? uniformHemisphereSamplePDF(1) : cosWeightedHemisphereSamplePDF(r1.d, snormal);
+		pdfRev = isRadiance ? uniformHemisphereSamplePDF(1) : cosWeightedHemisphereSamplePDF(r.d, snormal);
 		prev->pdfRev = pdfRev * invDist2 * glm::abs(glm::dot(prev->normal, glm::normalize(-w)));
 
 		// append the contribution to the beta from the current intersection point 

@@ -4,13 +4,13 @@ set(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 set(CMAKE_DEPENDS_CHECK_CXX
-  "/repo/simonsirak/BDPT/skeleton.cpp" "/repo/simonsirak/BDPT/CMakeFiles/SecondLab.dir/skeleton.cpp.o"
+  "/repo/ssirak/github/BDPT/skeleton.cpp" "/repo/ssirak/github/BDPT/CMakeFiles/SecondLab.dir/skeleton.cpp.o"
   )
-set(CMAKE_CXX_COMPILER_ID "Clang")
+set(CMAKE_CXX_COMPILER_ID "GNU")
 
 # The include file search paths:
 set(CMAKE_CXX_TARGET_INCLUDE_PATH
-  "/usr/local/include/SDL"
+  "/usr/include/SDL"
   "glm"
   )
 
