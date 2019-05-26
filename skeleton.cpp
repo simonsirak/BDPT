@@ -34,7 +34,7 @@ vector<Obj*> lights;
 
 /* BDPT parameters */
 vec3 buffer[SCREEN_WIDTH][SCREEN_HEIGHT];
-int numSamples = 50;
+int numSamples = 75;
 int maxDepth = 10;
 
 // ----------------------------------------------------------------------------
@@ -50,7 +50,7 @@ bool ClosestIntersection(
 
 int GenerateEyePath(int x, int y, vector<Vertex>& eyePath, int maxDepth);
 int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth);
-int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec3 beta);
+int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isCameraPath, vec3 beta);
 vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath);
 
 int main( int argc, char* argv[] )
@@ -89,15 +89,18 @@ void Draw()
 				vector<Vertex> lightPath;
 				vector<Vertex> eyePath;
 
-				// Trace eye path
+				// Generate eye path
 				GenerateEyePath(x, y, eyePath, maxDepth);
 
-				// Trace light path
+				// Generate light path
 				GenerateLightPath(lightPath, maxDepth);
 
                 vec3 old = buffer[x][y];
 
                 // This is the sequential form of division by numSamples.
+				// connect() calculates a multi-sample estimator from 
+				// the two paths using multiple importance sampling 
+				// with the balance heuristic.
 				buffer[x][y] = (old * float(i) + connect(lightPath, eyePath))/float(i+1);
 
                 PutPixelSDL( screen, x, y,  buffer[x][y]);
@@ -164,8 +167,17 @@ int GenerateEyePath(int x, int y, vector<Vertex>& eyePath, int maxDepth){
 	normal = glm::normalize(normal);
 	dir = glm::normalize(dir);
 
-	// KEEP AN EYE OUT FOR THIS BETA, should be correct tho
-	vec3 We = vec3(1,1,1), beta = vec3(1,1,1); // for simplicity, one pixel is perfectly covered by one ray, so importance is 1.
+	/*
+		Calculation of the initial sample contribution from 
+		camera endpoint.
+
+		Because my camera model is a pinhole camera and I only
+		shoot rays through one point of each pixel, We = 1. I.e
+		I model the camera so that one pixel is perfectly covered
+		by one ray.
+	*/
+	vec3 We = vec3(1,1,1);
+	vec3 beta = We;
 	eyePath.push_back({1, 0, We, -1, normal, cameraPos, dir}); // the probability up to this point is 1
 
 	return TracePath(Ray(cameraPos, dir), eyePath, maxDepth - 1, true, beta) + 1;
@@ -189,11 +201,11 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
     } 
 
 	vec3 offset = uniformSphereSample(light->r);
-    vec3 dir = cosWeightedHemisphereSample(offset);
+    vec3 dir = uniformHemisphereSample(offset, 1);
 
 	float lightChoiceProb = 1 / float(lights.size());
-	float lightPosProb = uniformSphereSamplePDF(light->r); // 1 / Area
-	float lightDirProb = /*uniformHemisphereSamplePDF(1); //*/cosWeightedHemisphereSamplePDF(dir, offset); // hemisphere uniform, not cosine weighted
+	float lightPosProb = uniformSphereSamplePDF(light->r);
+	float lightDirProb = uniformHemisphereSamplePDF(1);
 	float pointProb = lightChoiceProb * lightPosProb * lightDirProb;
 
 	vec3 Le = vec3(light->emission, light->emission, light->emission);
@@ -234,15 +246,15 @@ int GenerateLightPath(vector<Vertex>& lightPath, int maxDepth){
 	base case sample contribution (from either) is passed 
 	through from the beta vector.
 */
-int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec3 beta) {
+int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isCameraPath, vec3 beta) {
 
 	if (maxDepth == 0) {
 		return 0;  
 	}
 
 	int bounces = 0;
-	float pdfFwd = isRadiance ? uniformHemisphereSamplePDF(1) : 
-								cosWeightedHemisphereSamplePDF(subPath[0].dir, subPath[0].normal);
+	float pdfFwd = isCameraPath ? uniformHemisphereSamplePDF(1) : // 1 for camera path since ray is deterministic
+								uniformHemisphereSamplePDF(1);
 	float pdfRev = 0;
 	while(true){
 		Intersection point;
@@ -265,7 +277,7 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
         vec3 intersectionToOrigin = glm::normalize(r.o - r1.o);
         vec3 gnormal = glm::normalize(triangles[point.triangleIndex]->normal(r1.o));
 		vec3 snormal = glm::normalize(projectAOntoB(intersectionToOrigin, gnormal)); // HAS to be normalized after projection onto another vector.
-        r1.d = isRadiance ? uniformHemisphereSample(snormal, 1) : uniformHemisphereSample(snormal, 1);
+        r1.d = uniformHemisphereSample(snormal, 1); // regardless of which path, sample uniformly
 
 		/* Construct vertex */
 		vertex.position = point.position;
@@ -293,15 +305,17 @@ int TracePath(Ray r, vector<Vertex>& subPath, int maxDepth, bool isRadiance, vec
 		// pdfFwd: Probability of sampling the next direction from current.
 		// pdfRev: Probability of current sampling a direction towards previous. 
 		// so pdfRev is calculated in reversed direction compared to direction of path generation.
-		pdfFwd = isRadiance ? uniformHemisphereSamplePDF(1) : uniformHemisphereSamplePDF(1);
-		pdfRev = isRadiance ? uniformHemisphereSamplePDF(1) : uniformHemisphereSamplePDF(1);
+
+		// Regardless of path, sample uniformly
+		pdfFwd = uniformHemisphereSamplePDF(1);
+		pdfRev = uniformHemisphereSamplePDF(1);
 
 		prev->pdfRev = pdfRev * DirectionToAreaConversion(vertex, *prev);
 
 		// append the contribution to the beta from the current intersection point 
 		// onto the future intersection points
 
-		vec3 brdf = BRDF(vertex, r1.d, r.d, triangles, isRadiance); 
+		vec3 brdf = BRDF(vertex, r1.d, r.d, triangles, isCameraPath); 
 
 		/*
 			One of the many nested surface integral samples.
@@ -358,7 +372,11 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 
 	// t >= 1, s >= 2:
 	for(int i = 1; i <= t; ++i){
-		for(int j = 2; j <= s; ++j){ // eye is not really a surface so im not counting it?
+		for(int j = 2; j <= s; ++j){
+
+			// perform visibility test that is related to the geometry 
+			// term G. Only calculate contribution from this path 
+			// sampling strategy if connection is possible.
             Intersection otherObj;
 			otherObj.triangleIndex = lightPath[i-1].surfaceIndex; // previous vertex
 			if(!ClosestIntersection(lightPath[i-1].position, (eyePath[j-1].position - lightPath[i-1].position), triangles, otherObj)){
@@ -367,11 +385,20 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 				if(otherObj.triangleIndex != eyePath[j-1].surfaceIndex && otherObj.t > 0.01f){
 					continue;
 				} else {
-					// special case of light BRDF was recommended in
-					// Veach's PhD thesis, chapter 10.2. It avoids 
-					// index out of bounds.
+					/*
+						special case of light BRDF is to avoid 
+						index out of bounds. It essentially 
+						simulates "not using the light BRDF" if 
+						we are connecting directly to the light 
+						source. 
+						
+						This is correct behavior, since there is 
+						no real meaning to the BRDF at the light 
+						source (There is no "incoming direction")
+					*/
+
 					F +=   lightPath[i-1].c * eyePath[j-1].c 
-					    *  (i > 1 ? BRDF(lightPath[i-1], (lightPath[i-2].position - lightPath[i-1].position), (eyePath[j-1].position - lightPath[i-1].position), triangles, true) : lightPath[i-1].c)
+					    *  (i > 1 ? BRDF(lightPath[i-1], (lightPath[i-2].position - lightPath[i-1].position), (eyePath[j-1].position - lightPath[i-1].position), triangles, true) : vec3(1,1,1))
 						*  G(lightPath[i-1], eyePath[j-1])
 						*  BRDF(eyePath[j-1], (lightPath[i-1].position - eyePath[j-1].position), (eyePath[j-2].position - eyePath[j-1].position), triangles, true)
 						*  triangles[eyePath[j-1].surfaceIndex]->color / float(PI)
@@ -390,99 +417,3 @@ vec3 connect(vector<Vertex>& lightPath, vector<Vertex>& eyePath){
 
 	return F; 
 }
-
-/*
-TODO: GÖR OM CONNECT SÅ ATT DEN GÖR;
-- FOR EACH CONNECTION OF TWO SUBPATHS
-	- RUN ALL THE CASES 0, 1, WHATEVER
-	- COUNT THAT AS ONE SAMPLE AND DIVIDE BY NUMSAMPLES
-
-Right now, I am only calculating one strategy for each sample, i.e the 
-strategy you get from letting the subpaths be exactly what they actually are.
-
-When I fix this, I am 100 % done with the code.
-*/
-
-
-// PSEUDO CODE: Main Algorithm.
-/*
-    for i = 1 to N:
-        for each pixel:
-            eyePath = GenerateEyePath()
-            lightPath = GenerateLightPath()
-            F = connect(eyePath, lightPath)
-            color[pixel] = (color[pixel] * (i-1) + F) / i
-*/
-
-// PSEUDO CODE: Generate Subpath.
-// Input: r (ray from initial eye/light vertex), maxDepth
-/*
-    if maxDepth == 0 then return
-
-	pdfFwd = probability of direction from light/eye
-    pdfRev = 0
-	while maxDepth has not been reached:
-        1. if r does not intersect with a surface then stop looping
-
-        2. otherwise, construct a current vertex 
-           and get the previous vertex in subpath
-
-		3. create a new ray according to some probability function
-
-		Ray r1 = newConstructedRay()
-
-        4. construct the current vertex and store:
-            - Forward probability
-            - Sample Contribution at this vertex
-        
-        5. update sample contribution and forward/reverse probabilities
-
-        6. store the reverse probability in previous vertex
-
-		vertex.position = point.position;
-		vertex.normal = snormal;
-		vertex.surfaceIndex = point.triangleIndex;
-
-		vec3 w = vertex.position - prev->position;
-		float invDist2 = 1 / glm::dot(w, w);
-
-		// convert to area based density by applying solidangle-to-area conversion
-		vertex.pdfFwd = pdfFwd * invDist2 * glm::abs(glm::dot(gnormal, glm::normalize(w)));
-
-		// give old beta as the incoming at this intersection
-		vertex.c = beta;
-
-		// insert vertex
-		subPath.push_back(vertex);
-        prev = &subPath[bounces-1]; // NEED TO DO THIS IN CASE RESIZING OF VECTOR OCCURS
-
-		// don't include anything after a light source
-		if(triangles[point.triangleIndex]->emission > 0){
-			break;
-		}
-
-		// reverse is simulated as if the ray came 
-		pdfFwd = isRadiance ? uniformHemisphereSamplePDF(1) : cosWeightedHemisphereSamplePDF(r1.d, snormal);
-		pdfRev = isRadiance ? uniformHemisphereSamplePDF(1) : cosWeightedHemisphereSamplePDF(r.d, snormal);
-		prev->pdfRev = pdfRev * invDist2 * glm::abs(glm::dot(prev->normal, glm::normalize(-w)));
-
-		// append the contribution to the beta from the current intersection point 
-		// onto the future intersection points
-
-        // DOUBLE CHECK THAT CORRECT WO AND WI ARE USED
-        // (TRY DRAWING A PICTURE)
-		vec3 brdf = BRDF(vertex, r1.d, r.d, triangles, isRadiance); 
-		vec3 wi = -glm::normalize(w);
-		// one of the many nested surface integral samples
-		beta *= (brdf * glm::abs(glm::dot(r1.d, snormal) / pdfFwd)); // THIS was the reason i got white lines, it's because i used the wrong direction (the outgoing as opposed to the incoming from the next point)
-		
-		// It should be allowed to be > 10, this was just for debugging
-		// if(glm::length(beta) > 10)
-		// 	cout << "Depth " << bounces+1 << ", beta: " << beta.x << " " << beta.y << " " << beta.z << endl;
-
-		// CHANGE THE RAY OBVIOUSLY
-		r = r1;
-    }
-    
-    return bounces;
-*/

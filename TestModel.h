@@ -1,7 +1,7 @@
 #ifndef TEST_MODEL_CORNEL_BOX_H
 #define TEST_MODEL_CORNEL_BOX_H
 
-// Defines a simple test model: The Cornel Box
+// Defines a simple test model: The Cornell Box
 
 #include <glm/glm.hpp>
 #include <vector>
@@ -9,15 +9,33 @@
 using glm::vec3;
 using glm::mat3;
 
-// Rays have origin and direction.
-// The direction vector should always be normalized.
+/* 
+	Triangle structure is similar to that of Lab 2
+	of the rendering track. 
+	
+	The ray structure is a wrapper to allow easier 
+	understanding of the algorithms that handle rays.
+
+	The Sphere structure was added in this project.
+
+	Both Obj structures (Sphere and Triangle) have:
+	- color (essentially reflectance for diffuse reflection)
+	- emission (the amount of white light that is emitted)
+	- type (specifying BRDF type, currently only supports lambertian)
+	- ray-intersection procedures
+	- surface normal generator (not required to have a 
+	  certain orientation)
+*/
+
+/*
+	Rays have origin and direction.
+	The direction vector should always be normalized.
+*/ 
 struct Ray {
 	vec3 o, d;
 	Ray(vec3 o0 = vec3(0, 0, 0), vec3 d0 = vec3(1, 0, 0)): o(o0), d(glm::normalize(d0)) {}
 };
 
-// Objects have color, emission, type (diffuse, specular, refractive)
-// All object should be intersectable and should be able to compute their surface normals.
 class Obj {
 	public:
 	vec3 color;
@@ -71,7 +89,7 @@ class Sphere : public Obj {
 		else disc = sqrt(disc);
 		double sol1 = -b + disc;
 		double sol2 = -b - disc;
-		return (sol2>=0) ? sol2/2 : ((sol1>=0) ? sol1/2 : 0); // 0.01f is some epsilon to avoid self intersection
+		return (sol2>=0) ? sol2/2 : ((sol1>=0) ? sol1/2 : 0); 
 	}
 
 	vec3 normal(const vec3& p0) const {
@@ -257,12 +275,18 @@ void LoadTestModel( std::vector<Obj*>& triangles, std::vector<Obj*>& lights )
         }
 	}
 
+	/* ADDED IN PROJECT */
+
+	// Different light setups. You can play with the radius if 
+	// you want, but a larger radius generally means more samples
+	// if you want to reduce fireflies.
+
     // triangles.push_back(new Sphere(0.05, vec3(-0.7,  -0.7, -0.5)));
     // triangles[triangles.size()-1]->setMat(white, 14, 1);
     // lights.push_back(triangles[triangles.size()-1]);
 
-    triangles.push_back(new Sphere(0.15, vec3(0,  -0.7, -0.5)));
-    triangles[triangles.size()-1]->setMat(white, 7, 1);
+    triangles.push_back(new Sphere(0.05, vec3(0,  -0.7, -0.5)));
+    triangles[triangles.size()-1]->setMat(white, 14, 1);
     lights.push_back(triangles[triangles.size()-1]);
 
     // triangles.push_back(new Sphere(0.05, vec3(0.7,  -0.7, -0.5)));

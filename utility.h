@@ -7,7 +7,15 @@
 
 #define PI 3.141592653589793238462643383279502884
 
-// STRUCTS 
+/*
+    More data structures.
+
+    Intersection structure is largely the same as 
+    Lab 2 of rendering track.
+
+    Vertex structure is used for storing information
+    about each vertex in a subpath.
+*/
 struct Intersection{
 	vec3 position;
 	vec3 normal;
@@ -17,12 +25,13 @@ struct Intersection{
 
 struct Vertex {
 	float pdfFwd; // probability of reaching this particular vertex regular way
-	float pdfRev; // probability of reaching this particular vertex via reversed path (through the other kind of path)
+	float pdfRev; // probability of reaching this particular vertex from the reversed direction, e.g through the other path
 	vec3 c; // contribution from a path that crosses to the other sub-path from this vertex
-	int surfaceIndex; // index of surface collided with
+	int surfaceIndex; // triangles[]-index of surface collided with
+
 	vec3 normal; // correctly oriented normal of surface collided with
 	vec3 position;
-	vec3 dir; // rly only relevant to eye endpoint
+	vec3 dir; // outgoing direction (leftover artefact from old code, but still useful to store)
 };
 
 std::random_device rd;  //Will be used to obtain a seed for the random number engine
@@ -31,11 +40,18 @@ using namespace std;
 using glm::vec3;
 using glm::mat3;
 
+/*
+    Calculates and returns the orthogonal 
+    projection of vector a onto vector b.
+*/
 vec3 projectAOntoB(const vec3 & a, const vec3 & b){
     vec3 c = glm::dot(a, b) * b / glm::dot(b, b);
     return c;
 }
 
+/*
+    Returns a uniform sphere sample.
+*/
 vec3 uniformSphereSample(float r){
 
     std::uniform_real_distribution<float> dis(0, 1.0);
@@ -51,10 +67,16 @@ vec3 uniformSphereSample(float r){
     return dir;
 }
 
+/*
+    PDF for uniform sphere sample.
+*/
 float uniformSphereSamplePDF(float r){
     return 1/(r*r*4*PI);
 }
 
+/*
+    Sample hemisphere uniformly around an axis.
+*/
 vec3 uniformHemisphereSample(const vec3 & axis, float r){
 
     std::uniform_real_distribution<float> dis(0, 1.0);
@@ -70,68 +92,23 @@ vec3 uniformHemisphereSample(const vec3 & axis, float r){
     return dir;
 }
 
+/*
+    Get PDF for a uniform hemisphere sample.
+*/
 float uniformHemisphereSamplePDF(float r){
     return 1 / (r*r*2*PI);
 }
 
-// frame calculation taken from:
-// https://github.com/embree/embree-renderer/blob/master/common/math/linearspace3.h
-mat3 frame(const vec3 &N){
-    vec3 dx0 = glm::cross(vec3(1,0,0),N);
-    vec3 dx1 = glm::cross(vec3(0,1,0),N);
-    vec3 dx = glm::normalize(glm::dot(dx0,dx0) > glm::dot(dx1,dx1) ? dx0 : dx1);
-    vec3 dy = glm::normalize(glm::cross(N,dx));
-    return mat3(dx,dy,N);
-}
-
-// cosine weighted taken from: 
-// https://github.com/embree/embree-renderer/blob/master/devices/device_singleray/samplers/shapesampler.h
-// only works for directions as of now because of normalization, not e.g point samples
-vec3 cosWeightedHemisphereSample(const vec3 & axis){
-
-    std::uniform_real_distribution<float> dis(0, 1.0);
-
-    const float phi = float(2*PI) * dis(rd);
-    const float vv = 2.0f*(dis(rd) - 0.5f);
-    const float cosTheta = (vv < 0 ? -1 : 1)*sqrt(abs(vv)), sinTheta = sqrt(glm::max(0.f, 1 - cosTheta*cosTheta));
-    return glm::normalize(frame(glm::normalize(axis)) * vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta)); //Sample3f(Vector3f(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta), 2.0f*cosTheta*float(one_over_pi));
-}
-
-
-// only works for directions as of now, because I deliberately normalize
-// PDF corresponds to cosine weighted that was taken from:
-// https://github.com/embree/embree-renderer/blob/master/devices/device_singleray/samplers/shapesampler.h
-float cosWeightedHemisphereSamplePDF(const vec3 &sampled, const vec3 &axis){
-    return 2.0f*abs(glm::dot(glm::normalize(sampled),glm::normalize(axis)))*float(1/PI);
-}
-
-float uniformAreaLightSample(const Obj * light){
-    // TODO: 1 / Area
-    return 0;
-}
-
-float uniformAreaLightSamplePDF(const Obj * light){
-    // TODO
-    return 0;
-}
-
-// dir is direction to the top left of pixel
-vec3 uniformFilmSample(const vec3 & dir){
-    // TODO
-    return dir;
-}
-
-float uniformFilmSamplingPDF(){
-    // TODO
-    return 1;
-}
-
-vec3 BRDF(Vertex &vert, vec3 wo, vec3 wi, vector<Obj*> &shapes, bool isRadiance){
-    if(isRadiance){ // if radiance transport, i.e path starting from eye
-        // do nothing
-    } else { // Importance transport
-        // Path is generated backwards, wo flip incident and outgoing
-        // for correct BRDF
+/*
+    Calculates the BRDF. Currently only supports 
+    lambertian reflection (shape type == 1).
+*/
+vec3 BRDF(Vertex &vert, vec3 wo, vec3 wi, vector<Obj*> &shapes, bool keepDirections){
+    if(!keepDirections){ // if we are on light path
+        // Path is generated in other direction, so 
+        // flip incident and outgoing for correct 
+        // BRDF (only matters for non-diffuse 
+        // reflection).
         vec3 tmp = wo;
         wo = wi;
         wi = tmp;
@@ -142,12 +119,18 @@ vec3 BRDF(Vertex &vert, vec3 wo, vec3 wi, vector<Obj*> &shapes, bool isRadiance)
     if(shape->type == 1){ // lambertian
         return shape->color / float(PI);
     } else if(shape->type == 2){ // phong
-        // calculate reflected direction using Snell's Law
-        // calculate Fresnel Reflectance
-        // calculate BRDF according to PBR-BOOK
+        // FUTURE EXTENSION: Do Phong reflection.
     }
 }
 
+/*
+    Returns the geometry term between two vertices.
+
+    This geometry term does not include visibility
+    checks. It is done explicitly before using G,
+    so it only has to be done only when we don't 
+    know whether there is visibility.
+*/
 float G(const Vertex& a, const Vertex& b){
     vec3 ab = b.position - a.position;
 	float cosTheta = glm::dot(glm::normalize(a.normal), glm::normalize(ab)); // angle between outgoing and normal at a
@@ -162,9 +145,7 @@ float G(const Vertex& a, const Vertex& b){
     description of conversion provided by 
     chapter 8.2.2.2 of Veach's PhD thesis.
 
-    Input: nb - normal vector at intersection
-            a - position of previous vertex
-            b - position of intersection
+    Input: Two vertices on a subpath.
 */
 float DirectionToAreaConversion(const Vertex& a, const Vertex& b){
     vec3 w = b.position - a.position;
@@ -172,24 +153,41 @@ float DirectionToAreaConversion(const Vertex& a, const Vertex& b){
     return invDist2 * glm::abs(glm::dot(b.normal, glm::normalize(w)));
 }
 
+/*
+    Calculates the weighting function
+    for a certain connection of the light
+    and eye subpaths, specified by the 
+    indices s and t.
+
+    The weighting function implemented here
+    is the balance heuristic
+
+    The method of computation was inspired 
+    by the implementation in chapter 16.3
+    of the book PBRT (3rd ed). The loops 
+    were modified to consider only the path 
+    sampling strategies specified in the 
+    report. This was crucial in order for
+    the weighting function to be correct.
+*/
 float MIS(
 	vector<Vertex>& lightVertices, 
 	vector<Vertex>& eyeVertices, 
-	int s,
-	int t
+	int t,
+	int s
 ) {
 	if (s + t == 2) return 1;
     float sumRi = 0;
 
     // Define helper function _remap0_ that deals with Dirac delta functions
 	// e.g the beginning positional probability of the camera, which is 1 for 
-	// one point of the pixel, and 0 everywhere else. This is never reached 
-	// here tho, but it's just an example of a delta function.
+	// one point of the pixel, and 0 everywhere else. The camera vertex is 
+    // never reached here though, but it's just an example of a delta function.
     auto remap0 = [](float f) -> float { return f != 0 ? f : 1; };
 
 	// Consider hypothetical connection strategies along the camera subpath
     float ri = 1;
-    for (int i = t - 1; i > 1; --i) {
+    for (int i = s - 1; i > 1; --i) {
         ri *=
             remap0(eyeVertices[i].pdfRev) / remap0(eyeVertices[i].pdfFwd);
         sumRi += ri;
@@ -197,7 +195,7 @@ float MIS(
 
     // Consider hypothetical connection strategies along the light subpath
     ri = 1;
-    for (int i = s - 1; i >= 0; --i) {
+    for (int i = t - 1; i >= 0; --i) {
         ri *= remap0(lightVertices[i].pdfRev) / remap0(lightVertices[i].pdfFwd);
         sumRi += ri;
     }
