@@ -565,3 +565,87 @@ strategy you get from letting the subpaths be exactly what they actually are.
 
 When I fix this, I am 100 % done with the code.
 */
+
+
+// PSEUDO CODE: Main Algorithm.
+/*
+    for i = 1 to N:
+        for each pixel:
+            eyePath = GenerateEyePath()
+            lightPath = GenerateLightPath()
+            F = connect(eyePath, lightPath)
+            color[pixel] = (color[pixel] * (i-1) + F) / i
+*/
+
+// PSEUDO CODE: Generate Subpath.
+// Input: r (ray from initial eye/light vertex), maxDepth
+/*
+    if maxDepth == 0 then return
+
+	pdfFwd = probability of direction from light/eye
+    pdfRev = 0
+	while maxDepth has not been reached:
+        1. if r does not intersect with a surface then stop looping
+
+        2. otherwise, construct a current vertex 
+           and get the previous vertex in subpath
+
+		3. create a new ray according to some probability function
+
+		Ray r1 = newConstructedRay()
+
+        4. construct the current vertex and store:
+            - Forward probability
+            - Sample Contribution at this vertex
+        
+        5. update sample contribution and forward/reverse probabilities
+
+        6. store the reverse probability in previous vertex
+
+		vertex.position = point.position;
+		vertex.normal = snormal;
+		vertex.surfaceIndex = point.triangleIndex;
+
+		vec3 w = vertex.position - prev->position;
+		float invDist2 = 1 / glm::dot(w, w);
+
+		// convert to area based density by applying solidangle-to-area conversion
+		vertex.pdfFwd = pdfFwd * invDist2 * glm::abs(glm::dot(gnormal, glm::normalize(w)));
+
+		// give old beta as the incoming at this intersection
+		vertex.c = beta;
+
+		// insert vertex
+		subPath.push_back(vertex);
+        prev = &subPath[bounces-1]; // NEED TO DO THIS IN CASE RESIZING OF VECTOR OCCURS
+
+		// don't include anything after a light source
+		if(triangles[point.triangleIndex]->emission > 0){
+			break;
+		}
+
+		// reverse is simulated as if the ray came 
+		pdfFwd = isRadiance ? uniformHemisphereSamplePDF(1) : cosWeightedHemisphereSamplePDF(r1.d, snormal);
+		pdfRev = isRadiance ? uniformHemisphereSamplePDF(1) : cosWeightedHemisphereSamplePDF(r.d, snormal);
+		prev->pdfRev = pdfRev * invDist2 * glm::abs(glm::dot(prev->normal, glm::normalize(-w)));
+
+		// append the contribution to the beta from the current intersection point 
+		// onto the future intersection points
+
+        // DOUBLE CHECK THAT CORRECT WO AND WI ARE USED
+        // (TRY DRAWING A PICTURE)
+		vec3 brdf = BRDF(vertex, r1.d, r.d, triangles, isRadiance); 
+		vec3 wi = -glm::normalize(w);
+		// one of the many nested surface integral samples
+		beta *= (brdf * glm::abs(glm::dot(r1.d, snormal) / pdfFwd)); // THIS was the reason i got white lines, it's because i used the wrong direction (the outgoing as opposed to the incoming from the next point)
+		
+		// It should be allowed to be > 10, this was just for debugging
+		// if(glm::length(beta) > 10)
+		// 	cout << "Depth " << bounces+1 << ", beta: " << beta.x << " " << beta.y << " " << beta.z << endl;
+
+		// CHANGE THE RAY OBVIOUSLY
+		r = r1;
+    }
+    
+    return bounces;
+*/
