@@ -148,10 +148,28 @@ vec3 BRDF(Vertex &vert, vec3 wo, vec3 wi, vector<Obj*> &shapes, bool isRadiance)
     }
 }
 
-float G(vec3 na, vec3 nb, vec3 ab){
-	float cosTheta = glm::dot(glm::normalize(na), glm::normalize(ab)); // angle between outgoing and normal at a
-	float cosThetaPrime = glm::dot(glm::normalize(nb), glm::normalize(-ab)); // angle between ingoing and normal at b
+float G(const Vertex& a, const Vertex& b){
+    vec3 ab = b.position - a.position;
+	float cosTheta = glm::dot(glm::normalize(a.normal), glm::normalize(ab)); // angle between outgoing and normal at a
+	float cosThetaPrime = glm::dot(glm::normalize(b.normal), glm::normalize(-ab)); // angle between ingoing and normal at b
 	return abs(cosTheta*cosThetaPrime) / glm::dot(ab, ab);
+}
+
+/*
+    Calculates the conversion factor used when 
+    converting a direction-based probability 
+    to an area-based probability. Follows the 
+    description of conversion provided by 
+    chapter 8.2.2.2 of Veach's PhD thesis.
+
+    Input: nb - normal vector at intersection
+            a - position of previous vertex
+            b - position of intersection
+*/
+float DirectionToAreaConversion(const Vertex& a, const Vertex& b){
+    vec3 w = b.position - a.position;
+	float invDist2 = 1 / glm::dot(w, w);
+    return invDist2 * glm::abs(glm::dot(b.normal, glm::normalize(w)));
 }
 
 float MIS(
