@@ -15,8 +15,8 @@ using glm::mat3;
 // GLOBAL VARIABLES
 
 /* Screen variables */
-const int SCREEN_WIDTH = 200;
-const int SCREEN_HEIGHT = 200;
+const int SCREEN_WIDTH = 400;
+const int SCREEN_HEIGHT = 400;
 SDL_Surface* screen;
 
 /* Camera state (Camera looks into z direction) */ 
