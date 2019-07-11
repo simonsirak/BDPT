@@ -1,4 +1,4 @@
-This README describes the contents of this hand-in, 
+This README describes the contents of this repository, 
 where you can find different things, and how you compile
 the program.
 
