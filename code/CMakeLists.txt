@@ -1,12 +1,12 @@
 # Top-Level CMakeList.txt
 
 cmake_minimum_required (VERSION 2.6)
-project ( SecondLab )
+project ( BDPT )
 
-SET(GCC_COVERAGE_COMPILE_FLAGS "-std=c++11 -g -O3")
+SET(GCC_COVERAGE_COMPILE_FLAGS "-std=c++11 -O3")
 add_definitions(${GCC_COVERAGE_COMPILE_FLAGS})
 
-add_executable( SecondLab skeleton.cpp)
+add_executable( BDPT skeleton.cpp)
 
 find_package (SDL)
 
@@ -20,6 +20,6 @@ if(SDL_FOUND)
 		${PROJECT_SOURCE_DIR}/glm
 	)
 	#link_libraries(${SDL_LIBRARY})
-	target_link_libraries(SecondLab ${SDL_LIBRARY})
+	target_link_libraries(BDPT ${SDL_LIBRARY})
 endif(SDL_FOUND)
 

@@ -1,3 +1,0 @@
-/afs/kth.se/home/s/s/ssirak/repo/BDPT/CMakeFiles/edit_cache.dir
-/afs/kth.se/home/s/s/ssirak/repo/BDPT/CMakeFiles/rebuild_cache.dir
-/afs/kth.se/home/s/s/ssirak/repo/BDPT/CMakeFiles/SecondLab.dir
