@@ -31,7 +31,7 @@ COMPILATION
 The code is compiled using the exact same compilation 
 procedure as in Lab 2 of the rendering track, i.e by 
 using CMake and Make. This means that the correct SDL
-version (the one used in Lab 2) should be installed 
+version (the one used in Lab 2, SDL 1.2.15) must be installed 
 in order to run this code. The executable provided in this 
 zip-file is compiled for Ubuntu 18.04 LTS running on 
 an x86 architecture. If you are having trouble compiling
@@ -43,9 +43,10 @@ from successful compilation.
 
 CODE
 The code reuses the skeleton from Lab 2 of the 
-rendering track, mainly for the purpose of using SDL
-and the provided Cornell Box. The triangle intersection 
-is also reused from Lab 2 (which was written by me). 
+rendering track, specifically the SDL wrapper functions
+and the provided Cornell Box (excluding lights 
+and data structures). The triangle intersection 
+is also reused from Lab 2 (but was written by me). 
 The rest of the code was written by me, with 
 inspiration from the online book PBRT and Eric 
 Veach's PhD thesis.
