@@ -1,4 +1,5 @@
-NOTE: The code is provided as is, use at your own risk! There may very well exist some bugs that I haven't caught. The code  was written as part of a school assignment.
+NOTE: The code/blog is provided as is, use at your own risk! There may very well exist some bugs that I haven't caught.
+The code was written as part of a school assignment. Hopefullly the code/blog is useful in some way though!
 
 -
 
