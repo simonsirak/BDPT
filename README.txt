@@ -1,3 +1,7 @@
+NOTE: The code is provided as is, use at your own risk! There may very well exist some bugs that I haven't caught. The code  was written as part of a school assignment.
+
+-
+
 This README describes the contents of this repository, 
 where you can find different things, and how you compile
 the program.
